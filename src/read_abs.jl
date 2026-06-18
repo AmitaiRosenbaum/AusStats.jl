@@ -34,7 +34,7 @@ end
 
 function _local_path(path_or_url::AbstractString; download_dir::AbstractString)
     if startswith(lowercase(path_or_url), "http://") || startswith(lowercase(path_or_url), "https://")
-        return download_abs(path_or_url; dir=download_dir)
+        return _download_file(path_or_url; dest=download_dir)
     end
 
     return path_or_url
