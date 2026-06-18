@@ -120,7 +120,7 @@ end
 
 function _tidy_sheet_time_down(rows, sheetname::AbstractString; metadata::Bool=true)
     date_col, date_rows = _best_date_column(rows)
-    if date_col === nothing || length(date_rows) < 2
+    if date_col === nothing || isempty(date_rows)
         return _empty_tidy_abs()
     end
 
@@ -135,13 +135,11 @@ function _tidy_sheet_time_down(rows, sheetname::AbstractString; metadata::Bool=t
         series_id = _series_id_for_column(rows, col, first_date_row, labels)
         unit = metadata ? _metadata_for_column(rows, col, labels, ["unit", "units"]) : missing
         series = metadata ? _series_name_for_column(rows, col, first_date_row, labels) : missing
-        frequency = metadata ? _metadata_for_column(rows, col, labels, ["frequency"]) : missing
-        if metadata && ismissing(frequency)
-            frequency = _infer_frequency([_parse_abs_date(rows[row_index][date_col]) for row_index in date_rows])
-        end
+        frequency = metadata ? _normalise_frequency(_metadata_for_column(rows, col, labels, ["frequency"])) : "unknown"
+        frequency == "unknown" && (frequency = _infer_frequency([rows[row_index][date_col] for row_index in date_rows]))
 
         for row_index in date_rows
-            date = _parse_abs_date(rows[row_index][date_col])
+            date = _period_start(rows[row_index][date_col], frequency)
             date === nothing && continue
 
             value = _parse_abs_float(get(rows[row_index], col, missing))
@@ -158,7 +156,7 @@ end
 
 function _tidy_sheet_time_across(rows, sheetname::AbstractString; metadata::Bool=true)
     header_row, date_cols = _best_date_header_row(rows)
-    if header_row === nothing || length(date_cols) < 2
+    if header_row === nothing || isempty(date_cols)
         return _empty_tidy_abs()
     end
 
@@ -172,13 +170,11 @@ function _tidy_sheet_time_across(rows, sheetname::AbstractString; metadata::Bool
 
         unit = metadata ? _metadata_for_row(row, rows[header_row], ["unit", "units"]) : missing
         series = metadata ? _series_name_for_row(row, rows[header_row]) : missing
-        frequency = metadata ? _metadata_for_row(row, rows[header_row], ["frequency"]) : missing
-        if metadata && ismissing(frequency)
-            frequency = _infer_frequency([_parse_abs_date(rows[header_row][col]) for col in date_cols])
-        end
+        frequency = metadata ? _normalise_frequency(_metadata_for_row(row, rows[header_row], ["frequency"])) : "unknown"
+        frequency == "unknown" && (frequency = _infer_frequency([rows[header_row][col] for col in date_cols]))
 
         for col in date_cols
-            date = _parse_abs_date(rows[header_row][col])
+            date = _period_start(rows[header_row][col], frequency)
             date === nothing && continue
 
             value = _parse_abs_float(get(row, col, missing))
@@ -335,39 +331,82 @@ function _series_name_for_row(row, header)
 end
 
 function _parse_abs_date(value)
+    period = _parse_abs_period(value)
+    return period === nothing ? nothing : period.date
+end
+
+function _parse_abs_period(value)
     ismissing(value) && return nothing
-    value isa Date && return value
-    value isa DateTime && return Date(value)
+    value isa Date && return (date=value, frequency="unknown")
+    value isa DateTime && return (date=Date(value), frequency="unknown")
 
     if value isa Real
         serial = round(Int, value)
         serial > 10_000 || return nothing
-        return Date(1899, 12, 30) + Day(serial)
+        return (date=Date(1899, 12, 30) + Day(serial), frequency="unknown")
     end
 
     text = strip(string(value))
     isempty(text) && return nothing
 
+    year = match(r"^([0-9]{4})$", text)
+    if year !== nothing
+        return (date=Date(parse(Int, year.captures[1]), 1, 1), frequency="annual")
+    end
+
+    year_month = match(r"^([0-9]{4})[-/]([0-9]{1,2})$", text)
+    if year_month !== nothing
+        month = parse(Int, year_month.captures[2])
+        1 <= month <= 12 || return nothing
+        return (date=Date(parse(Int, year_month.captures[1]), month, 1), frequency="monthly")
+    end
+
     quarter = match(r"^([0-9]{4})[- ]?Q([1-4])$"i, text)
     if quarter !== nothing
         year = parse(Int, quarter.captures[1])
         month = 3 * (parse(Int, quarter.captures[2]) - 1) + 1
-        return Date(year, month, 1)
+        return (date=Date(year, month, 1), frequency="quarterly")
     end
 
-    month_year = match(r"^([A-Za-z]{3})[- ]?([0-9]{2})$", text)
+    quarter = match(r"^Q([1-4])[- ]?([0-9]{4})$"i, text)
+    if quarter !== nothing
+        year = parse(Int, quarter.captures[2])
+        month = 3 * (parse(Int, quarter.captures[1]) - 1) + 1
+        return (date=Date(year, month, 1), frequency="quarterly")
+    end
+
+    month_year = match(r"^([A-Za-z]{3})[- ]?([0-9]{2}|[0-9]{4})$", text)
     if month_year !== nothing
         month = _month_number(month_year.captures[1])
-        year = 2000 + parse(Int, month_year.captures[2])
-        return Date(year, month, 1)
+        year = _parse_abs_year(month_year.captures[2])
+        return (date=Date(year, month, 1), frequency="unknown")
     end
 
     for format in (dateformat"yyyy-mm-dd", dateformat"dd/mm/yyyy", dateformat"m/d/yyyy", dateformat"u yyyy", dateformat"U yyyy")
         parsed = tryparse(Date, text, format)
-        parsed === nothing || return parsed
+        parsed === nothing || return (date=parsed, frequency="unknown")
     end
 
     return nothing
+end
+
+function _period_start(value, frequency::AbstractString)
+    period = _parse_abs_period(value)
+    period === nothing && return nothing
+
+    if frequency == "quarterly"
+        quarter_month = 3 * div(month(period.date) - 1, 3) + 1
+        return Date(year(period.date), quarter_month, 1)
+    elseif frequency == "annual"
+        return Date(year(period.date), 1, 1)
+    end
+
+    return period.date
+end
+
+function _parse_abs_year(text::AbstractString)
+    year = parse(Int, text)
+    return year < 100 ? 2000 + year : year
 end
 
 function _month_number(month::AbstractString)
@@ -389,23 +428,30 @@ function _parse_abs_float(value)
     return parsed === nothing ? missing : parsed
 end
 
-function _infer_frequency(dates)
-    clean_dates = sort([date for date in dates if date !== nothing])
-    length(clean_dates) < 2 && return missing
+function _infer_frequency(values)
+    periods = [_parse_abs_period(value) for value in values]
+    clean_periods = [period for period in periods if period !== nothing]
+    isempty(clean_periods) && return "unknown"
+
+    known = [period.frequency for period in clean_periods if period.frequency != "unknown"]
+    !isempty(known) && all(frequency -> frequency == first(known), known) && return first(known)
+
+    clean_dates = sort([period.date for period in clean_periods])
+    length(clean_dates) < 2 && return "unknown"
 
     months = [_month_delta(clean_dates[index], clean_dates[index + 1]) for index in 1:(length(clean_dates) - 1)]
-    isempty(months) && return missing
+    isempty(months) && return "unknown"
 
     median_months = sort(months)[cld(length(months), 2)]
     if median_months == 1
-        return "Monthly"
+        return "monthly"
     elseif median_months == 3
-        return "Quarterly"
+        return "quarterly"
     elseif median_months == 12
-        return "Annual"
+        return "annual"
     end
 
-    return missing
+    return "unknown"
 end
 
 function _month_delta(start_date::Date, end_date::Date)
@@ -415,6 +461,19 @@ end
 function _clean_text(value)
     _empty_series_value(value) && return ""
     return strip(string(value))
+end
+
+function _normalise_frequency(value)
+    ismissing(value) && return "unknown"
+    text = lowercase(strip(string(value)))
+    isempty(text) && return "unknown"
+
+    startswith(text, "month") && return "monthly"
+    startswith(text, "quarter") && return "quarterly"
+    startswith(text, "annual") && return "annual"
+    startswith(text, "year") && return "annual"
+
+    return "unknown"
 end
 
 function _looks_like_abs_series_id(text::AbstractString)

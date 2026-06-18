@@ -30,6 +30,39 @@ function sample_workbook(path=tempname() * ".xlsx")
     return path
 end
 
+function period_workbook()
+    path = tempname() * ".xlsx"
+
+    XLSX.openxlsx(path, mode="w") do xf
+        sheet = xf[1]
+        XLSX.rename!(sheet, "Monthly")
+        sheet["A1"] = "Series ID"
+        sheet["B1"] = "M1234567"
+        sheet["A2"] = "Jan-2024"
+        sheet["B2"] = 1
+        sheet["A3"] = "2024-02"
+        sheet["B3"] = 2
+
+        sheet = XLSX.addsheet!(xf, "Quarterly")
+        sheet["A1"] = "Series ID"
+        sheet["B1"] = "Q1234567"
+        sheet["A2"] = "Mar-2024"
+        sheet["B2"] = 3
+        sheet["A3"] = "2024-Q2"
+        sheet["B3"] = 4
+        sheet["A4"] = "Q3 2024"
+        sheet["B4"] = 5
+
+        sheet = XLSX.addsheet!(xf, "Annual")
+        sheet["A1"] = "Series ID"
+        sheet["B1"] = "Y1234567"
+        sheet["A2"] = "2024"
+        sheet["B2"] = 6
+    end
+
+    return path
+end
+
 @testset "AustralianStatistics smoke tests" begin
     labour = search_abs("labour")
     @test "6202.0" in labour.cat_no
@@ -50,6 +83,15 @@ end
     @test tidy isa DataFrame
     @test names(tidy) == ["series_id", "table", "date", "value", "unit", "series", "frequency"]
     @test tidy.date[1] == Date(2026, 4, 1)
+    @test tidy.frequency[1] == "monthly"
+
+    periods = tidy_abs(period_workbook())
+    @test periods[periods.series_id .== "M1234567", :date] == [Date(2024, 1, 1), Date(2024, 2, 1)]
+    @test unique(periods[periods.series_id .== "M1234567", :frequency]) == ["monthly"]
+    @test periods[periods.series_id .== "Q1234567", :date] == [Date(2024, 1, 1), Date(2024, 4, 1), Date(2024, 7, 1)]
+    @test unique(periods[periods.series_id .== "Q1234567", :frequency]) == ["quarterly"]
+    @test periods[periods.series_id .== "Y1234567", :date] == [Date(2024, 1, 1)]
+    @test periods[periods.series_id .== "Y1234567", :frequency] == ["annual"]
 
     raw = read_abs(workbook)
     @test raw isa DataFrame
