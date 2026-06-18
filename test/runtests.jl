@@ -4,12 +4,11 @@ using Dates
 using Test
 using XLSX
 
-function sample_workbook()
-    path = tempname() * ".xlsx"
+function sample_workbook(path=tempname() * ".xlsx")
 
     XLSX.openxlsx(path, mode="w") do xf
         sheet = xf[1]
-        XLSX.rename!(sheet, "Table 1")
+        XLSX.rename!(sheet, "Data1")
         sheet["A1"] = "Series ID"
         sheet["B1"] = "A84423043A"
         sheet["A2"] = "Data item"
@@ -20,6 +19,12 @@ function sample_workbook()
         sheet["B4"] = 12.5
         sheet["A5"] = "May-26"
         sheet["B5"] = ""
+
+        sheet = XLSX.addsheet!(xf, "Table 2")
+        sheet["A1"] = "Series ID"
+        sheet["B1"] = "B1234567"
+        sheet["A2"] = "Apr-26"
+        sheet["B2"] = 99.0
     end
 
     return path
@@ -48,4 +53,10 @@ end
 
     raw = read_abs(workbook)
     @test raw isa DataFrame
+
+    sample_workbook(joinpath(default_cache_dir(), source.filename))
+    @test first(read_abs("6202.0"; tables=["1"]).table) == "Data1"
+    @test first(read_abs("6202.0"; tables=["Table 1"]).table) == "Data1"
+    @test first(read_abs("6202.0"; tables=["Data1"]).table) == "Data1"
+    @test first(read_abs("6202.0"; tables=1).table) == "Data1"
 end
