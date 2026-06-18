@@ -98,7 +98,7 @@ function read_abs_series(series_id::AbstractString; cat_no=nothing, cache::Bool=
 
     for catalogue in catalogues
         path = _catalogue_workbook(catalogue; cache)
-        matches = _series_matches(tidy_abs(path), series_id)
+        matches = _series_matches(tidy_abs(path; cat_no=catalogue), series_id)
         isempty(matches) || append!(out, matches)
     end
 

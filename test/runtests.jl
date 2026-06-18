@@ -15,10 +15,14 @@ function sample_workbook(path=tempname() * ".xlsx")
         sheet["B2"] = "Employed total"
         sheet["A3"] = "Unit"
         sheet["B3"] = "Persons"
-        sheet["A4"] = "Apr-26"
-        sheet["B4"] = 12.5
-        sheet["A5"] = "May-26"
-        sheet["B5"] = ""
+        sheet["A4"] = "Frequency"
+        sheet["B4"] = "Monthly"
+        sheet["A5"] = "Seasonal adjustment"
+        sheet["B5"] = "Seasonally adjusted"
+        sheet["A6"] = "Apr-26"
+        sheet["B6"] = 12.5
+        sheet["A7"] = "May-26"
+        sheet["B7"] = ""
 
         sheet = XLSX.addsheet!(xf, "Table 2")
         sheet["A1"] = "Series ID"
@@ -81,9 +85,13 @@ end
 
     tidy = tidy_abs(workbook)
     @test tidy isa DataFrame
-    @test names(tidy) == ["series_id", "table", "date", "value", "unit", "series", "frequency"]
+    @test names(tidy) == ["series_id", "series", "unit", "frequency", "seasonal_adjustment", "table", "cat_no", "date", "value"]
     @test tidy.date[1] == Date(2026, 4, 1)
     @test tidy.frequency[1] == "monthly"
+    @test tidy.series[1] == "Employed total"
+    @test tidy.unit[1] == "Persons"
+    @test tidy.seasonal_adjustment[1] == "Seasonally adjusted"
+    @test ismissing(tidy.cat_no[1])
 
     periods = tidy_abs(period_workbook())
     @test periods[periods.series_id .== "M1234567", :date] == [Date(2024, 1, 1), Date(2024, 2, 1)]
@@ -101,4 +109,8 @@ end
     @test first(read_abs("6202.0"; tables=["Table 1"]).table) == "Data1"
     @test first(read_abs("6202.0"; tables=["Data1"]).table) == "Data1"
     @test first(read_abs("6202.0"; tables=1).table) == "Data1"
+
+    series = read_abs_series("A84423043A"; cat_no="6202.0")
+    @test first(series.cat_no) == "6202.0"
+    @test first(series.seasonal_adjustment) == "Seasonally adjusted"
 end
