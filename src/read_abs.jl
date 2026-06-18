@@ -14,19 +14,42 @@ function read_abs(path_or_url::AbstractString; sheet=nothing, header_row::Union{
 end
 
 """
-    read_abs_series(path_or_url; sheet=nothing, header_row=nothing, download_dir=tempdir())
+    read_abs_series(series_id; cat_no=nothing, cache=true)
 
-Read an ABS spreadsheet and keep rows that look like time-series observations.
+Read rows for `series_id` from supported ABS catalogue workbooks. When `cat_no`
+is omitted, all currently supported catalogues are searched.
 """
-function read_abs_series(path_or_url::AbstractString; sheet=nothing, header_row::Union{Int,Nothing}=nothing, download_dir::AbstractString=tempdir())
-    df = read_abs(path_or_url; sheet, header_row, download_dir)
+function read_abs_series(series_id::AbstractString; cat_no=nothing, cache::Bool=true)
+    catalogues = cat_no === nothing ? _supported_catalogues() : [strip(string(cat_no))]
+    out = _empty_tidy_abs()
+
+    for catalogue in catalogues
+        path = _catalogue_workbook(catalogue; cache)
+        matches = _series_matches(tidy_abs(path), series_id)
+        isempty(matches) || append!(out, matches)
+    end
+
+    return out
+end
+
+function _supported_catalogues()
+    return sort(collect(keys(ABS_TIME_SERIES_WORKBOOKS)))
+end
+
+function _catalogue_workbook(cat_no::AbstractString; cache::Bool=true)
+    if cache
+        return download_abs(cat_no)
+    end
+
+    return download_abs(cat_no; dest=mktempdir(), force=true)
+end
+
+function _series_matches(df::DataFrame, series_id::AbstractString)
     isempty(df) && return df
 
-    series_columns = [name for name in names(df) if _looks_like_series_column(name)]
-    isempty(series_columns) && return df
-
-    keep = map(eachrow(df)) do row
-        any(name -> !_empty_series_value(row[name]), series_columns)
+    needle = lowercase(strip(series_id))
+    keep = map(df.series_id) do candidate
+        lowercase(strip(string(candidate))) == needle
     end
 
     return df[keep, :]
