@@ -2,24 +2,32 @@ const ABS_BASE_URL = "https://www.abs.gov.au"
 
 const ABS_TIME_SERIES_WORKBOOKS = Dict(
     "6202.0" => (
-        title = "Labour Force",
+        title = "Labour Force, Australia",
+        description = "Monthly labour force estimates including employment, unemployment, participation, hours worked, and related time series.",
         url = "https://www.abs.gov.au/statistics/labour/employment-and-unemployment/labour-force-australia/apr-2026/62020001.xlsx",
         filename = "6202.0_labour_force_table_001.xlsx",
+        supported = true,
     ),
     "6401.0" => (
-        title = "Consumer Price Index",
+        title = "Consumer Price Index, Australia",
+        description = "Quarterly consumer price inflation measures including CPI groups, capital cities, and analytical series.",
         url = "https://www.abs.gov.au/statistics/economy/price-indexes-and-inflation/consumer-price-index-australia/apr-2026/640101.xlsx",
         filename = "6401.0_cpi_table_001.xlsx",
+        supported = true,
     ),
     "5206.0" => (
-        title = "National Accounts",
+        title = "Australian National Accounts",
+        description = "Quarterly national income, expenditure, product, GDP, and related national accounts time series.",
         url = "https://www.abs.gov.au/statistics/economy/national-accounts/australian-national-accounts-national-income-expenditure-and-product/mar-2026/5206001_Key_Aggregates.xlsx",
         filename = "5206.0_national_accounts_key_aggregates.xlsx",
+        supported = true,
     ),
     "6345.0" => (
-        title = "Wage Price Index",
+        title = "Wage Price Index, Australia",
+        description = "Quarterly wage price indexes by sector, state, industry, and original/seasonally adjusted trend series.",
         url = "https://www.abs.gov.au/statistics/economy/price-indexes-and-inflation/wage-price-index-australia/mar-2026/63450Table2bto9b.xlsx",
         filename = "6345.0_wage_price_index_all_quarterly_series.xlsx",
+        supported = true,
     ),
 )
 
@@ -59,6 +67,26 @@ function _download_file(url::AbstractString; dest::AbstractString=tempdir(), fil
     end
 
     return Downloads.download(url, target)
+end
+
+"""
+    search_abs(query)
+
+Search the locally known ABS catalogue map.
+"""
+function search_abs(query::AbstractString)
+    needle = lowercase(strip(query))
+    matches = DataFrame(cat_no=String[], title=String[], description=String[], supported=Bool[])
+
+    for cat_no in sort(collect(keys(ABS_TIME_SERIES_WORKBOOKS)))
+        source = ABS_TIME_SERIES_WORKBOOKS[cat_no]
+        haystack = lowercase(join((cat_no, source.title, source.description), " "))
+        if isempty(needle) || occursin(needle, haystack)
+            push!(matches, (cat_no, source.title, source.description, source.supported))
+        end
+    end
+
+    return matches
 end
 
 """
