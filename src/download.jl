@@ -31,8 +31,6 @@ const ABS_TIME_SERIES_WORKBOOKS = Dict(
     ),
 )
 
-default_cache_dir() = joinpath(homedir(), ".cache", "AustralianStatistics")
-
 """
     download_abs(cat_no; dest=default_cache_dir(), force=false)
 
