@@ -24,6 +24,8 @@ makedocs(;
             "Convenience Readers" => "tutorials/convenience.md",
             "ABS API" => "tutorials/api.md",
             "Cache Management" => "tutorials/cache.md",
+            "Testing And Reproducibility" => "tutorials/reproducibility.md",
+            "Workflow Migration" => "tutorials/migration.md",
         ],
         "API Reference" => "api.md",
     ],

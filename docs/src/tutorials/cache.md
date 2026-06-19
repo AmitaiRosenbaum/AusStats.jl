@@ -71,3 +71,14 @@ Force a reparse and overwrite the current parsed cache entry:
 ```julia
 df = read_abs("6202.0"; tables=1, refresh=true)
 ```
+
+`refresh=true` does not delete unrelated cache entries. Use `clear_cache!` when
+you want to remove cached files:
+
+```julia
+clear_cache!(:parsed)
+clear_cache!(:api)
+```
+
+For reproducible projects, record the package version, the requested catalogue
+or release date, and the relevant cached source workbook from `cache_info()`.

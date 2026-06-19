@@ -46,6 +46,12 @@ Direct URLs are also supported:
 path = download_cube("https://www.abs.gov.au/path/to/cube.xlsx")
 ```
 
+Use a historical release where ABS archive discovery can identify cube files:
+
+```julia
+path = download_cube("6202.0"; cube="gross flows", release=Date(2024, 1, 1))
+```
+
 ## Read A Cube
 
 ```julia
@@ -81,3 +87,14 @@ raw_cube = read_cube(path; family=:generic)
 For recurring labelled matrix cubes, where dimension columns are followed by
 period columns, `family=:auto` returns a long table with `date`, `frequency`,
 `value`, dimension columns, and source metadata.
+
+## Cubes Versus Time-Series Workbooks
+
+Use [`read_abs`](@ref) when the ABS file is a standard time-series workbook with
+series IDs and dates. Use [`read_cube`](@ref) when the file is a data cube with
+richer dimensions, cross-tabulations, or non-standard workbook structure.
+
+```julia
+timeseries = read_abs("6202.0"; tables=1)
+cube = read_cube("6202.0"; cube="gross flows")
+```

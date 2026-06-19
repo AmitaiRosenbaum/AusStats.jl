@@ -61,3 +61,17 @@ generic readers:
 df = read_abs("6202.0"; tables=1)
 cube = read_cube("6202.0"; cube="gross flows")
 ```
+
+## Choosing The Right Reader
+
+Convenience readers are useful in scripts and notebooks once the ABS family is
+known. Generic readers are better during exploration because they expose
+catalogue discovery, file selection, local paths, URLs, and directory inputs.
+
+```julia
+files("6401.0"; refresh=true)
+cpi = read_cpi(; table=1)
+```
+
+If ABS changes a publication structure, convenience readers raise an informative
+error that points back to the generic discovery functions.

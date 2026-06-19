@@ -46,6 +46,10 @@ Use custom column names when the parts have a known meaning:
 expanded = separate_series(df; names=[:measure, :region, :sex])
 ```
 
+`names` must match the number of generated parts. If the lengths do not match,
+`separate_series` throws an `ArgumentError` rather than silently dropping
+components.
+
 Standalone aggregate labels can be removed from the split components:
 
 ```julia
@@ -65,4 +69,10 @@ Use [`latest_date`](@ref) to check the latest available period in a result:
 
 ```julia
 latest_date(df)
+```
+
+Use a different date column name when needed:
+
+```julia
+latest_date(df; date=:period_start)
 ```
