@@ -34,7 +34,7 @@ end
         Any["2024", 10],
     ]
     @test AusStats._series_id_for_column(fallback_rows, 1, 2, Dict{String,Int}()) == "A1234567X"
-    @test AusStats._series_id_for_column(fallback_rows, 2, 2, Dict{String,Int}()) == "Column2"
+    @test AusStats._series_id_for_column(fallback_rows, 2, 2, Dict{String,Int}()) == "Column 2"
     @test AusStats._series_id_for_row(Any[]) == ""
     @test AusStats._series_id_for_row(Any["Plain series", 10]) == "Plain series"
     @test AusStats._series_name_for_row(Any["Plain series", 10], Any["Name", "Value"]) == "Plain series"

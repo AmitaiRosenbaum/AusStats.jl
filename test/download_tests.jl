@@ -87,7 +87,7 @@ end
     @test AusStats._release_key(Date(2026, 12, 1)) == "dec-2026"
     @test AusStats._release_month_number("September") == 9
     @test AusStats._release_page_from_file_url("https://example.test/path/file.xlsx") == "https://example.test/path"
-    @test AusStats._release_page_from_file_url("https://example.test/path/may-2026/file.xlsx") == "https://example.test/path"
+    @test AusStats._release_page_from_file_url("https://example.test/path/may-2026/file.xlsx") == "https://example.test/path/may-2026"
     @test AusStats._looks_like_release_url(seed.page_url * "/may-2026", seed)
     @test !AusStats._looks_like_release_url("https://example.test/may-2026", seed)
     @test occursin("no releases are known", AusStats._missing_release_message("9999.0", Date(2026, 1, 1), Date[]))

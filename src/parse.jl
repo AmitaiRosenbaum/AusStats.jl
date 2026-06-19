@@ -624,7 +624,7 @@ function _normalise_frequency(value)
     startswith(text, "week") && return "weekly"
     startswith(text, "fortnight") && return "fortnightly"
     (startswith(text, "biannual") || startswith(text, "semiannual") || startswith(text, "half-year")) && return "semiannual"
-    startswith(text, "day") && return "daily"
+    (startswith(text, "day") || startswith(text, "dail")) && return "daily"
 
     return "unknown"
 end
