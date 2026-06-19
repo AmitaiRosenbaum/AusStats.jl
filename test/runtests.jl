@@ -74,6 +74,37 @@ function cube_workbook(path=tempname() * ".xlsx")
     return path
 end
 
+function labelled_cube_workbook(path=tempname() * ".xlsx")
+    mkpath(dirname(path))
+    XLSX.openxlsx(path, mode="w") do xf
+        sheet = xf[1]
+        XLSX.rename!(sheet, "Matrix")
+        sheet["A1"] = "Labour Force detailed data cube"
+        sheet["A2"] = "State"
+        sheet["B2"] = "Sex"
+        sheet["C2"] = "Age"
+        sheet["D2"] = "Mar-2024"
+        sheet["E2"] = "Jun-2024"
+        sheet["A3"] = "NSW"
+        sheet["B3"] = "Male"
+        sheet["C3"] = "15-24"
+        sheet["D3"] = 10
+        sheet["E3"] = 11
+        sheet["A4"] = "NSW"
+        sheet["B4"] = "Female"
+        sheet["C4"] = "15-24"
+        sheet["D4"] = ".."
+        sheet["E4"] = 12
+        sheet["A5"] = "Source: Australian Bureau of Statistics"
+        sheet["D5"] = 999
+
+        sheet = XLSX.addsheet!(xf, "Notes")
+        sheet["A1"] = "Notes"
+        sheet["A2"] = "This sheet should remain generic if requested directly."
+    end
+    return path
+end
+
 function convenience_fixture_index()
     workbook_rows = [
         ("6302.0", "Average Weekly Earnings, Australia", "Average weekly earnings time series.", "Table 1. Average Weekly Earnings", "6302.0_awe_table_001.xlsx"),
@@ -104,6 +135,7 @@ function convenience_fixture_index()
     cube_rows = [
         ("Detailed Labour Force data cube", "6202.0_lfs_detailed_cube.xlsx"),
         ("Gross flows data cube", "6202.0_lfs_gross_flows_cube.xlsx"),
+        ("Labelled matrix Labour Force data cube", "6202.0_lfs_labelled_matrix_cube.xlsx"),
     ]
     for (file_title, filename) in cube_rows
         push!(rows, AustralianStatistics._file_row(;
@@ -130,7 +162,8 @@ function convenience_fixture_index()
         sample_workbook(joinpath(default_cache_dir(), "workbooks", row.filename))
     end
     for row in eachrow(index[index.is_cube, :])
-        cube_workbook(joinpath(default_cache_dir(), "cubes", row.filename))
+        path = joinpath(default_cache_dir(), "cubes", row.filename)
+        occursin("labelled", row.filename) ? labelled_cube_workbook(path) : cube_workbook(path)
     end
 
     return index
@@ -465,8 +498,37 @@ end
     cube = read_cube(cube_workbook())
     @test cube isa DataFrame
     @test cube.sheet == ["Cube 1", "Cube 1"]
+    @test "source_file" in names(cube)
+
+    matrix_cube = read_cube(labelled_cube_workbook())
+    @test names(matrix_cube) == [
+        "source_file", "cat_no", "release_date", "cube", "cube_title", "sheet",
+        "date", "frequency", "value", "State", "Sex", "Age",
+    ]
+    @test nrow(matrix_cube) == 4
+    @test matrix_cube.date == [Date(2024, 3, 1), Date(2024, 6, 1), Date(2024, 3, 1), Date(2024, 6, 1)]
+    @test matrix_cube.frequency == fill("unknown", 4)
+    @test ismissing(matrix_cube.value[3])
+    @test matrix_cube.State == ["NSW", "NSW", "NSW", "NSW"]
+    @test matrix_cube.Sex == ["Male", "Male", "Female", "Female"]
+
+    generic_matrix = read_cube(labelled_cube_workbook(); family=:generic)
+    @test "State" in names(generic_matrix)
+    @test "Mar2024" in names(generic_matrix)
+    @test nrow(generic_matrix) == 2
+    @test_throws ArgumentError read_cube(labelled_cube_workbook(); family=:unknown)
 
     convenience_fixture_index()
+    cube_index = cube_files("6202.0")
+    @test all(cube_index.is_cube)
+    @test any(occursin.("Labelled matrix", cube_index.file_title))
+    @test nrow(search_cubes("labelled"; cat_no="6202.0")) == 1
+    downloaded_cube = download_cube("6202.0"; cube="labelled")
+    @test isfile(downloaded_cube)
+    @test downloaded_cube == joinpath(default_cache_dir(), "cubes", "6202.0_lfs_labelled_matrix_cube.xlsx")
+    cached_url_cube = labelled_cube_workbook(joinpath(default_cache_dir(), "cubes", "cached-url-cube.xlsx"))
+    @test download_cube("https://example.test/cached-url-cube.xlsx") == cached_url_cube
+    @test_throws ArgumentError cube_files(; release=Date(2024, 3, 1))
     @test unique(read_cpi(; table=1).cat_no) == ["6401.0"]
     @test unique(read_awe(; table=1).cat_no) == ["6302.0"]
     @test unique(read_erp(; table=1).cat_no) == ["3101.0"]
@@ -480,6 +542,10 @@ end
     lfs_cube = read_lfs_cube(; cube="detailed")
     @test lfs_cube isa DataFrame
     @test unique(lfs_cube.sheet) == ["Cube 1"]
+    indexed_matrix = read_cube("6202.0"; cube="labelled")
+    @test unique(indexed_matrix.cat_no) == ["6202.0"]
+    @test unique(indexed_matrix.cube) == ["6202.0_lfs_labelled_matrix_cube.xlsx"]
+    @test unique(indexed_matrix.cube_title) == ["Labelled matrix Labour Force data cube"]
     error_message = try
         read_cpi(; table=999)
         ""

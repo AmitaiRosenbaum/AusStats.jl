@@ -150,12 +150,17 @@ function download_abs(cat_no::AbstractString; file=nothing, release=:latest, des
 end
 
 """
-    download_cube(cat_no; cube=nothing, release=:latest, dest=default_cache_dir(), force=false)
+    download_cube(source; cube=nothing, release=:latest, dest=default_cache_dir(), force=false)
 
-Download an ABS data cube for `cat_no` and return the local path.
+Download an ABS data cube from a catalogue number or direct URL and return the
+local path.
 """
-function download_cube(cat_no::AbstractString; cube=nothing, release=:latest, dest::AbstractString=default_cache_dir(), force::Bool=false)
-    row = _select_file(cat_no; file=cube, release, cube=true)
+function download_cube(source::AbstractString; cube=nothing, release=:latest, dest::AbstractString=default_cache_dir(), force::Bool=false)
+    if _is_url(source)
+        return _download_file(source; dest=joinpath(dest, "cubes"), force)
+    end
+
+    row = _select_file(source; file=cube, release, cube=true)
     return _download_file(row.url; dest=joinpath(dest, "cubes"), filename=row.filename, force)
 end
 

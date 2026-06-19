@@ -31,6 +31,7 @@ read_series
 separate_series
 latest_date
 search_cubes
+cube_files
 read_cube
 ```
 

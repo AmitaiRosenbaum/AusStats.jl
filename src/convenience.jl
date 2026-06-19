@@ -57,24 +57,24 @@ function read_payrolls(; release::Union{Symbol,Date,AbstractString}=:latest, tab
 end
 
 """
-    read_lfs_grossflows(; release=:latest, cube="gross flows", cache=true, refresh=false)
+    read_lfs_grossflows(; release=:latest, cube="gross flows", cache=true, refresh=false, family=:auto)
 
 Read the Labour Force, Australia (`6202.0`) gross flows data cube using
 [`read_cube`](@ref). Override `cube` if ABS changes the downloadable file title
 but keeps the data in the Labour Force catalogue.
 """
-function read_lfs_grossflows(; release::Union{Symbol,Date,AbstractString}=:latest, cube::Union{Nothing,AbstractString}="gross flows", cache::Bool=true, refresh::Bool=false)
-    return _read_cube_convenience("Labour Force gross flows", _LFS_CAT_NO; cube, release, cache, refresh)
+function read_lfs_grossflows(; release::Union{Symbol,Date,AbstractString}=:latest, cube::Union{Nothing,AbstractString}="gross flows", cache::Bool=true, refresh::Bool=false, family::Symbol=:auto)
+    return _read_cube_convenience("Labour Force gross flows", _LFS_CAT_NO; cube, release, cache, refresh, family)
 end
 
 """
-    read_lfs_cube(; cube=nothing, release=:latest, cache=true, refresh=false)
+    read_lfs_cube(; cube=nothing, release=:latest, cache=true, refresh=false, family=:auto)
 
 Read a Labour Force, Australia (`6202.0`) data cube using [`read_cube`](@ref).
 Pass `cube` to select a cube by file title, filename, or table number.
 """
-function read_lfs_cube(; cube::Union{Nothing,AbstractString}=nothing, release::Union{Symbol,Date,AbstractString}=:latest, cache::Bool=true, refresh::Bool=false)
-    return _read_cube_convenience("Labour Force data cube", _LFS_CAT_NO; cube, release, cache, refresh)
+function read_lfs_cube(; cube::Union{Nothing,AbstractString}=nothing, release::Union{Symbol,Date,AbstractString}=:latest, cache::Bool=true, refresh::Bool=false, family::Symbol=:auto)
+    return _read_cube_convenience("Labour Force data cube", _LFS_CAT_NO; cube, release, cache, refresh, family)
 end
 
 function _read_catalogue_convenience(label::AbstractString, cat_no::AbstractString; release, table, cache::Bool, refresh::Bool, tidy::Bool)
@@ -87,11 +87,11 @@ function _read_catalogue_convenience(label::AbstractString, cat_no::AbstractStri
     end
 end
 
-function _read_cube_convenience(label::AbstractString, cat_no::AbstractString; cube, release, cache::Bool, refresh::Bool)
+function _read_cube_convenience(label::AbstractString, cat_no::AbstractString; cube, release, cache::Bool, refresh::Bool, family::Symbol)
     refresh && files(cat_no; refresh=true)
 
     try
-        return read_cube(cat_no; cube, release, cache)
+        return read_cube(cat_no; cube, release, cache, family)
     catch error
         _throw_convenience_error(label, cat_no, error)
     end
