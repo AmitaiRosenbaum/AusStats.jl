@@ -28,12 +28,38 @@ function read_abs_url(url::AbstractString; tables=nothing, tidy::Bool=true, cach
 end
 
 """
-    read_abs_local(path; tables=nothing, tidy=true)
+    read_abs_local(path; tables=nothing, tidy=true, recursive=false)
 
-Read an ABS workbook from a local file.
+Read ABS workbooks from a local file, vector of files, or directory. Directory
+reads include `.xls` and `.xlsx` files and are non-recursive by default.
 """
-function read_abs_local(path::AbstractString; tables=nothing, tidy::Bool=true)
+function read_abs_local(path::AbstractString; tables=nothing, tidy::Bool=true, recursive::Bool=false)
+    if isdir(path)
+        paths = _local_workbook_paths(path; recursive)
+        return _read_local_workbooks(paths; tables, tidy)
+    end
+
+    _validate_local_workbook(path)
     return _read_workbook(path; tables, tidy)
+end
+
+function read_abs_local(paths::AbstractVector; tables=nothing, tidy::Bool=true, recursive::Bool=false)
+    isempty(paths) && throw(ArgumentError("no local workbook paths were supplied"))
+
+    workbooks = String[]
+    for (index, path) in enumerate(paths)
+        path isa AbstractString || throw(ArgumentError("local workbook path at index $index must be a string, got $(typeof(path))"))
+        if isdir(path)
+            append!(workbooks, _local_workbook_paths(path; recursive))
+        else
+            _validate_local_workbook(path; context="path at index $index")
+            push!(workbooks, abspath(path))
+        end
+    end
+
+    unique!(workbooks)
+    isempty(workbooks) && throw(ArgumentError("no local Excel workbooks were found"))
+    return _read_local_workbooks(workbooks; tables, tidy)
 end
 
 """
@@ -113,6 +139,63 @@ function _read_workbook(path::AbstractString; tables=nothing, tidy::Bool=true, c
     end
 
     return _read_raw_workbook(path; tables)
+end
+
+function _read_local_workbooks(paths; tables=nothing, tidy::Bool=true)
+    combined = DataFrame()
+
+    for path in paths
+        table = try
+            _read_workbook(path; tables, tidy)
+        catch error
+            message = sprint(showerror, error)
+            throw(ArgumentError("failed to read local workbook `$path`: $message"))
+        end
+
+        table[!, :source_file] = fill(abspath(path), nrow(table))
+        if isempty(combined) && ncol(combined) == 0
+            combined = table
+        else
+            append!(combined, table; cols=:union)
+        end
+    end
+
+    return combined
+end
+
+function _local_workbook_paths(directory::AbstractString; recursive::Bool=false)
+    ispath(directory) || throw(ArgumentError("local path does not exist: `$directory`"))
+    isdir(directory) || throw(ArgumentError("local path is not a directory: `$directory`"))
+
+    roots = recursive ? [root for (root, _, _) in walkdir(directory)] : [directory]
+    cache_workbooks = joinpath(directory, "workbooks")
+    if !recursive && isdir(cache_workbooks)
+        push!(roots, cache_workbooks)
+    end
+
+    paths = String[]
+    for root in unique(roots)
+        for name in readdir(root)
+            path = joinpath(root, name)
+            isfile(path) || continue
+            _is_excel_workbook(path) && push!(paths, abspath(path))
+        end
+    end
+
+    sort!(unique!(paths))
+    isempty(paths) && throw(ArgumentError("directory `$directory` contains no .xls or .xlsx workbooks$(recursive ? "" : "; pass `recursive=true` to search subdirectories")"))
+    return paths
+end
+
+function _validate_local_workbook(path::AbstractString; context::AbstractString="path")
+    ispath(path) || throw(ArgumentError("$context does not exist: `$path`"))
+    isfile(path) || throw(ArgumentError("$context is not a file: `$path`"))
+    _is_excel_workbook(path) || throw(ArgumentError("unsupported local file `$path`; expected a .xls or .xlsx workbook"))
+    return abspath(path)
+end
+
+function _is_excel_workbook(path::AbstractString)
+    return lowercase(splitext(path)[2]) in (".xls", ".xlsx")
 end
 
 function _read_tidy_workbook(path::AbstractString; tables=nothing, cat_no=missing, release_date=missing)

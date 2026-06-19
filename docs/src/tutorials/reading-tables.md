@@ -49,6 +49,30 @@ read_abs_local(path; tables=1)
 read_abs_url("https://www.abs.gov.au/path/to/workbook.xlsx"; tables=1)
 ```
 
+## Reading Multiple Local Workbooks
+
+Pass a vector of paths to combine local workbooks:
+
+```julia
+df = read_abs_local(["january.xlsx", "february.xlsx"]; tables=1)
+```
+
+Pass a directory to read all `.xls` and `.xlsx` files directly inside it:
+
+```julia
+df = read_abs_local("data/abs"; tables=1)
+```
+
+Subdirectories are ignored by default. Enable recursive discovery explicitly:
+
+```julia
+df = read_abs_local("data/abs"; tables=1, recursive=true)
+```
+
+When a directory contains a `workbooks` subdirectory, such as the package cache
+layout, that directory is included in a non-recursive read. Combined results
+include `source_file` alongside the existing sheet and table provenance.
+
 ## Raw Sheet Reads
 
 Set `tidy=false` to read the first matched sheet as a raw table.

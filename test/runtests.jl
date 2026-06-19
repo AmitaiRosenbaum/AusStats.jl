@@ -217,12 +217,45 @@ end
     @test periods[periods.series_id .== "Y1234567", :frequency] == ["annual"]
 
     @test read_abs_local(workbook) isa DataFrame
+    @test "source_file" ∉ names(read_abs_local(workbook))
     @test read_abs(workbook) isa DataFrame
     @test read_abs(workbook; tidy=false) isa DataFrame
     @test unique(read_abs(workbook; tables=["1"]).table) == ["Data1"]
     @test unique(read_abs(workbook; tables=["Table 1"]).table) == ["Data1"]
     @test unique(read_abs(workbook; tables=["Data1"]).table) == ["Data1"]
     @test unique(read_abs(workbook; tables=1).table) == ["Data1"]
+
+    local_dir = mktempdir()
+    first_local = sample_workbook(joinpath(local_dir, "first.xlsx"))
+    nested_dir = joinpath(local_dir, "nested")
+    second_local = sample_workbook(joinpath(nested_dir, "second.xlsx"))
+
+    multiple_local = read_abs_local([first_local, second_local]; tables=1)
+    @test nrow(multiple_local) == 8
+    @test Set(multiple_local.source_file) == Set(abspath.([first_local, second_local]))
+    @test unique(multiple_local.table) == ["Data1"]
+
+    direct_directory = read_abs_local(local_dir; tables=1)
+    @test nrow(direct_directory) == 4
+    @test unique(direct_directory.source_file) == [abspath(first_local)]
+
+    recursive_directory = read_abs_local(local_dir; tables=1, recursive=true)
+    @test nrow(recursive_directory) == 8
+    @test Set(recursive_directory.source_file) == Set(abspath.([first_local, second_local]))
+
+    cache_folder = mktempdir()
+    cached_local = sample_workbook(joinpath(cache_folder, "workbooks", "cached.xlsx"))
+    cached_directory = read_abs_local(cache_folder; tables=1)
+    @test unique(cached_directory.source_file) == [abspath(cached_local)]
+
+    empty_directory = mktempdir()
+    @test_throws ArgumentError read_abs_local(empty_directory)
+    @test_throws ArgumentError read_abs_local(joinpath(empty_directory, "missing.xlsx"))
+    invalid_file = joinpath(empty_directory, "notes.txt")
+    touch(invalid_file)
+    @test_throws ArgumentError read_abs_local(invalid_file)
+    @test_throws ArgumentError read_abs_local([first_local, joinpath(empty_directory, "missing.xlsx")])
+    @test_throws ArgumentError read_abs_local(Any[first_local, 42])
 
     metadata = read_metadata(workbook; tables=1)
     @test nrow(metadata) == 2
