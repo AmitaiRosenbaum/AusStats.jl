@@ -403,7 +403,7 @@ function historical_release_fixture_rows()
     ))
 end
 
-@testset "AustralianStatistics v0.2" begin
+@testset "AustralianStatistics" begin
     @test "6202.0" in search_abs("labour").cat_no
     @test "6401.0" in search_abs("cpi").cat_no
     @test "6202.0" in catalogues().cat_no

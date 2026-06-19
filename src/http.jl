@@ -1,7 +1,16 @@
 const ABS_BASE_URL = "https://www.abs.gov.au"
 const ABS_API_BASE_URL = "https://data.api.abs.gov.au/rest"
 
-const ABS_USER_AGENT = "AustralianStatistics.jl/0.2"
+function _package_version()
+    project = joinpath(dirname(@__DIR__), "Project.toml")
+    if isfile(project)
+        parsed = Pkg.TOML.parsefile(project)
+        return string(get(parsed, "version", "dev"))
+    end
+    return "dev"
+end
+
+const ABS_USER_AGENT = string("AustralianStatistics.jl/", _package_version())
 
 struct ABSError <: Exception
     message::String

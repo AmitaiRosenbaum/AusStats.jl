@@ -7,6 +7,7 @@ using Cascadia
 using Gumbo
 using HTTP
 using JSON3
+using Pkg
 using Preferences
 using Scratch
 using XLSX
