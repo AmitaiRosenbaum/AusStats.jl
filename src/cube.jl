@@ -4,7 +4,7 @@
 Search known ABS data cube files.
 """
 function search_cubes(query::AbstractString; cat_no=nothing, refresh::Bool=false)
-    cubes = cube_files(cat_no; refresh)
+    cubes = cube_files(cat_no; refresh=refresh)
     needle = lowercase(strip(query))
     isempty(needle) && return cubes
 
@@ -34,11 +34,11 @@ for a historical release.
 function cube_files(cat_no=nothing; release=nothing, refresh::Bool=false)
     df = if release isa Date
         cat_no === nothing && throw(ArgumentError("cat_no is required when release is a Date"))
-        _files_for_release(string(cat_no), release; refresh, strict=refresh)
+        _files_for_release(string(cat_no), release; refresh=refresh, strict=refresh)
     elseif release === nothing
-        cat_no === nothing ? files(; refresh) : files(cat_no; refresh)
+        cat_no === nothing ? files(; refresh=refresh) : files(cat_no; refresh=refresh)
     else
-        all_files = cat_no === nothing ? files(; refresh) : files(cat_no; refresh)
+        all_files = cat_no === nothing ? files(; refresh=refresh) : files(cat_no; refresh=refresh)
         release_key = lowercase(strip(string(release)))
         all_files[lowercase.(all_files.release_date) .== release_key, :]
     end
@@ -48,27 +48,33 @@ function cube_files(cat_no=nothing; release=nothing, refresh::Bool=false)
 end
 
 """
-    read_cube(source; cube=nothing, release=:latest, cache=true, family=:auto)
+    read_cube(source; cube=nothing, release=:latest, cache=true, cache_parsed=true, refresh=false, family=:auto)
 
 Read an ABS data cube from a catalogue number, URL, or local workbook path.
 Data cubes are returned as `DataFrame`s with source workbook and sheet
 provenance. `family=:auto` tries known cube parsers before falling back to the
 generic sheet-shaped parser. Use `family=:generic` to force the fallback parser.
+Parsed cube outputs are cached by default and invalidated when the source
+workbook, parser version, package version, or read options change.
 """
-function read_cube(source::AbstractString; cube=nothing, release=:latest, cache::Bool=true, family::Symbol=:auto)
+function read_cube(source::AbstractString; cube=nothing, release=:latest, cache::Bool=true, cache_parsed::Bool=true, refresh::Bool=false, family::Symbol=:auto)
     path, metadata = if _is_url(source)
         dest = cache ? _cache_subdir(:cubes) : mktempdir()
         (_download_file(source; dest, force=!cache), _cube_metadata(; url=source))
     elseif isfile(source)
         (source, _cube_metadata())
     else
-        row = _select_file(source; file=cube, release, cube=true)
+        refresh && files(source; refresh=true)
+        row = _select_file(source; file=cube, release=release, cube=true)
         downloaded = cache ? download_cube(source; cube, release) :
             _download_file(row.url; dest=mktempdir(), filename=row.filename, force=true)
         (downloaded, _cube_metadata(row))
     end
 
-    return _read_cube_workbook(path; family, metadata)
+    options = (cube=cube, release=release, family=family, metadata=metadata)
+    return _with_parsed_cache(path; kind=:read_cube, options=options, cache_parsed=cache_parsed, refresh=refresh) do
+        _read_cube_workbook(path; family=family, metadata=metadata)
+    end
 end
 
 function _read_cube_workbook(path::AbstractString; family::Symbol=:auto, metadata=_cube_metadata())

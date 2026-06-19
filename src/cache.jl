@@ -32,7 +32,7 @@ end
     clear_cache!(what=:all)
 
 Delete cached files for this package. `what` can be `:all`, `:indexes`,
-`:workbooks`, `:cubes`, or `:api`.
+`:workbooks`, `:cubes`, `:parsed`, or `:api`.
 """
 function clear_cache!(what=:all)
     dir = default_cache_dir()
@@ -71,6 +71,7 @@ function _cache_matches(dir::AbstractString, path::AbstractString, what)
     what == :indexes && kind == :indexes && return true
     what == :workbooks && kind == :workbooks && return true
     what == :cubes && kind == :cubes && return true
+    what == :parsed && kind == :parsed && return true
     what == :api && kind == :api && return true
     return false
 end

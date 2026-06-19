@@ -78,16 +78,23 @@ function _clean_cell(value)
 end
 
 """
-    tidy_abs(path; metadata=true, cat_no=missing, release_date=missing)
+    tidy_abs(path; metadata=true, cat_no=missing, release_date=missing, cache_parsed=false, refresh=false)
 
 Parse an ABS Excel time-series workbook into a tidy `DataFrame`.
 """
-function tidy_abs(path::AbstractString; metadata::Bool=true, cat_no=missing, release_date=missing)
+function tidy_abs(path::AbstractString; metadata::Bool=true, cat_no=missing, release_date=missing, cache_parsed::Bool=false, refresh::Bool=false)
+    options = (metadata=metadata, cat_no=cat_no, release_date=release_date)
+    return _with_parsed_cache(path; kind=:tidy_abs, options=options, cache_parsed=cache_parsed, refresh=refresh) do
+        _parse_tidy_abs(path; metadata=metadata, cat_no=cat_no, release_date=release_date)
+    end
+end
+
+function _parse_tidy_abs(path::AbstractString; metadata::Bool=true, cat_no=missing, release_date=missing)
     out = _empty_tidy_abs()
 
     XLSX.openxlsx(path) do xf
         for (sheet_index, sheetname) in enumerate(XLSX.sheetnames(xf))
-            sheet_rows = _tidy_sheet(xf[sheetname], sheetname; metadata, cat_no, release_date, sheet_index)
+            sheet_rows = _tidy_sheet(xf[sheetname], sheetname; metadata=metadata, cat_no=cat_no, release_date=release_date, sheet_index=sheet_index)
             isempty(sheet_rows) || append!(out, sheet_rows)
         end
     end

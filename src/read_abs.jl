@@ -1,49 +1,52 @@
 """
-    read_abs(source; tables=nothing, release=:latest, tidy=true, cache=true)
+    read_abs(source; tables=nothing, release=:latest, tidy=true, cache=true, cache_parsed=true, refresh=false)
 
 Read ABS data from a catalogue number, URL, or local workbook path. Time-series
-workbooks are returned as tidy long-format `DataFrame`s by default.
+workbooks are returned as tidy long-format `DataFrame`s by default. Parsed
+`DataFrame`s are cached by default and invalidated when the source workbook,
+parser version, package version, or read options change.
 """
-function read_abs(source::AbstractString; tables=nothing, release=:latest, tidy::Bool=true, cache::Bool=true)
+function read_abs(source::AbstractString; tables=nothing, release=:latest, tidy::Bool=true, cache::Bool=true, cache_parsed::Bool=true, refresh::Bool=false)
     if _is_url(source)
-        return read_abs_url(source; tables, tidy, cache)
+        return read_abs_url(source; tables=tables, tidy=tidy, cache=cache, cache_parsed=cache_parsed, refresh=refresh)
     elseif isfile(source)
-        return read_abs_local(source; tables, tidy)
+        return read_abs_local(source; tables=tables, tidy=tidy, cache_parsed=cache_parsed, refresh=refresh)
     end
 
-    row = _select_file(source; release, cube=false)
-    path = cache ? download_abs(source; file=row.filename, release) : _download_file(row.url; dest=mktempdir(), filename=row.filename, force=true)
-    return _read_workbook(path; tables, tidy, cat_no=row.cat_no, release_date=row.release_date)
+    refresh && files(source; refresh=true)
+    row = _select_file(source; release=release, cube=false)
+    path = cache ? download_abs(source; file=row.filename, release=release) : _download_file(row.url; dest=mktempdir(), filename=row.filename, force=true)
+    return _read_workbook(path; tables=tables, tidy=tidy, cat_no=row.cat_no, release_date=row.release_date, cache_parsed=cache_parsed, refresh=refresh)
 end
 
 """
-    read_abs_url(url; tables=nothing, tidy=true, cache=true)
+    read_abs_url(url; tables=nothing, tidy=true, cache=true, cache_parsed=true, refresh=false)
 
 Read an ABS workbook directly from `url`.
 """
-function read_abs_url(url::AbstractString; tables=nothing, tidy::Bool=true, cache::Bool=true)
+function read_abs_url(url::AbstractString; tables=nothing, tidy::Bool=true, cache::Bool=true, cache_parsed::Bool=true, refresh::Bool=false)
     dest = cache ? _cache_subdir(:workbooks) : mktempdir()
-    path = _download_file(url; dest, force=!cache)
-    return _read_workbook(path; tables, tidy)
+    path = _download_file(url; dest=dest, force=!cache)
+    return _read_workbook(path; tables=tables, tidy=tidy, cache_parsed=cache_parsed, refresh=refresh)
 end
 
 """
-    read_abs_local(path; tables=nothing, tidy=true, recursive=false)
+    read_abs_local(path; tables=nothing, tidy=true, recursive=false, cache_parsed=true, refresh=false)
 
 Read ABS workbooks from a local file, vector of files, or directory. Directory
 reads include `.xls` and `.xlsx` files and are non-recursive by default.
 """
-function read_abs_local(path::AbstractString; tables=nothing, tidy::Bool=true, recursive::Bool=false)
+function read_abs_local(path::AbstractString; tables=nothing, tidy::Bool=true, recursive::Bool=false, cache_parsed::Bool=true, refresh::Bool=false)
     if isdir(path)
         paths = _local_workbook_paths(path; recursive)
-        return _read_local_workbooks(paths; tables, tidy)
+        return _read_local_workbooks(paths; tables=tables, tidy=tidy, cache_parsed=cache_parsed, refresh=refresh)
     end
 
     _validate_local_workbook(path)
-    return _read_workbook(path; tables, tidy)
+    return _read_workbook(path; tables=tables, tidy=tidy, cache_parsed=cache_parsed, refresh=refresh)
 end
 
-function read_abs_local(paths::AbstractVector; tables=nothing, tidy::Bool=true, recursive::Bool=false)
+function read_abs_local(paths::AbstractVector; tables=nothing, tidy::Bool=true, recursive::Bool=false, cache_parsed::Bool=true, refresh::Bool=false)
     isempty(paths) && throw(ArgumentError("no local workbook paths were supplied"))
 
     workbooks = String[]
@@ -59,7 +62,7 @@ function read_abs_local(paths::AbstractVector; tables=nothing, tidy::Bool=true, 
 
     unique!(workbooks)
     isempty(workbooks) && throw(ArgumentError("no local Excel workbooks were found"))
-    return _read_local_workbooks(workbooks; tables, tidy)
+    return _read_local_workbooks(workbooks; tables=tables, tidy=tidy, cache_parsed=cache_parsed, refresh=refresh)
 end
 
 """
@@ -73,11 +76,11 @@ function read_metadata(source::AbstractString; tables=nothing)
 end
 
 """
-    read_series(series_id; cat_no=nothing, tables=nothing, release=:latest, cache=true)
+    read_series(series_id; cat_no=nothing, tables=nothing, release=:latest, cache=true, cache_parsed=true)
 
 Read observations for one or more ABS series identifiers.
 """
-function read_series(series_id; cat_no=nothing, tables=nothing, release=:latest, cache::Bool=true)
+function read_series(series_id; cat_no=nothing, tables=nothing, release=:latest, cache::Bool=true, cache_parsed::Bool=true)
     ids = series_id isa AbstractString ? [series_id] : collect(series_id)
     needles = Set(lowercase(strip(string(id))) for id in ids)
 
@@ -86,7 +89,7 @@ function read_series(series_id; cat_no=nothing, tables=nothing, release=:latest,
 
     for catalogue in catalogue_list
         df = try
-            read_abs(string(catalogue); tables, release, tidy=true, cache)
+            read_abs(string(catalogue); tables=tables, release=release, tidy=true, cache=cache, cache_parsed=cache_parsed)
         catch
             continue
         end
@@ -138,12 +141,15 @@ function latest_date(df::DataFrame; date=:date)
     return maximum(values)
 end
 
-function _read_workbook(path::AbstractString; tables=nothing, tidy::Bool=true, cat_no=missing, release_date=missing)
-    if tidy
-        return _read_tidy_workbook(path; tables, cat_no, release_date)
-    end
+function _read_workbook(path::AbstractString; tables=nothing, tidy::Bool=true, cat_no=missing, release_date=missing, cache_parsed::Bool=true, refresh::Bool=false)
+    options = (tables=tables, tidy=tidy, cat_no=cat_no, release_date=release_date)
+    return _with_parsed_cache(path; kind=:read_abs, options=options, cache_parsed=cache_parsed, refresh=refresh) do
+        if tidy
+            return _read_tidy_workbook(path; tables=tables, cat_no=cat_no, release_date=release_date)
+        end
 
-    return _read_raw_workbook(path; tables)
+        return _read_raw_workbook(path; tables=tables)
+    end
 end
 
 function _metadata_source(source::AbstractString)
@@ -190,12 +196,12 @@ function _read_metadata_workbook(path::AbstractString; tables=nothing, cat_no=mi
     return unique(out)
 end
 
-function _read_local_workbooks(paths; tables=nothing, tidy::Bool=true)
+function _read_local_workbooks(paths; tables=nothing, tidy::Bool=true, cache_parsed::Bool=true, refresh::Bool=false)
     combined = DataFrame()
 
     for path in paths
         table = try
-            _read_workbook(path; tables, tidy)
+            _read_workbook(path; tables=tables, tidy=tidy, cache_parsed=cache_parsed, refresh=refresh)
         catch error
             message = sprint(showerror, error)
             throw(ArgumentError("failed to read local workbook `$path`: $message"))

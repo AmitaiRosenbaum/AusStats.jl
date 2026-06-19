@@ -7,9 +7,11 @@ using Cascadia
 using Gumbo
 using HTTP
 using JSON3
-using Pkg
 using Preferences
+using Serialization
+using SHA
 using Scratch
+using TOML
 using XLSX
 
 export read_abs, read_abs_url, read_abs_local, read_metadata, tidy_abs
@@ -23,6 +25,7 @@ export default_cache_dir, cache_info, clear_cache!
 
 include("cache.jl")
 include("http.jl")
+include("parsed_cache.jl")
 include("download.jl")
 include("parse.jl")
 include("read_abs.jl")

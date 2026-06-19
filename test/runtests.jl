@@ -489,6 +489,24 @@ end
     @test unique(read_abs(workbook; tables=["Data1"]).table) == ["Data1"]
     @test unique(read_abs(workbook; tables=1).table) == ["Data1"]
 
+    clear_cache!(:parsed)
+    cached_parse = read_abs_local(workbook; tables=1, cache_parsed=true)
+    parsed_info = cache_info()
+    parsed_files = parsed_info[parsed_info.kind .== "parsed", :]
+    @test nrow(parsed_files) == 1
+    @test isequal(cached_parse, read_abs_local(workbook; tables=1, cache_parsed=true))
+    parsed_info = cache_info()
+    @test nrow(parsed_info[parsed_info.kind .== "parsed", :]) == 1
+    @test isequal(read_abs_local(workbook; tables=1, cache_parsed=false), cached_parse)
+    @test isequal(read_abs_local(workbook; tables=1, cache_parsed=true, refresh=true), cached_parse)
+    parsed_info = cache_info()
+    @test nrow(parsed_info[parsed_info.kind .== "parsed", :]) == 1
+    sleep(1.1)
+    touch(workbook)
+    @test isequal(read_abs_local(workbook; tables=1, cache_parsed=true), cached_parse)
+    parsed_info = cache_info()
+    @test nrow(parsed_info[parsed_info.kind .== "parsed", :]) == 2
+
     local_dir = mktempdir()
     first_local = sample_workbook(joinpath(local_dir, "first.xlsx"))
     nested_dir = joinpath(local_dir, "nested")

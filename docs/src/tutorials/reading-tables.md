@@ -12,6 +12,9 @@ df = read_abs("6202.0"; tables=1)
 
 The output is long-format time-series data with source table and sheet metadata.
 
+Parsed outputs are cached by default. Use `cache_parsed=false` to disable this
+for one read, or `refresh=true` to force a reparse.
+
 ## Forgiving Table Matching
 
 The `tables` keyword:

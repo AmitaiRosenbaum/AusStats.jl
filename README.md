@@ -71,7 +71,8 @@ observations = read_api("CPI"; start_period="2024-Q1")
 default_cache_dir()
 cache_info()
 clear_cache!(:workbooks)
+clear_cache!(:parsed)
 clear_cache!()
 ```
 
-Network-backed discovery and online integration tests are optional. Offline workflows continue to use cached indexes/files and bundled seed catalogue entries.
+Network-backed discovery and online integration tests are optional. Offline workflows continue to use cached indexes/files and bundled seed catalogue entries. Parsed `DataFrame` outputs are cached by default; pass `cache_parsed=false` for a one-off uncached read or `refresh=true` to force a reparse.

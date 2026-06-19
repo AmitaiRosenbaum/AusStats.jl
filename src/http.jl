@@ -4,7 +4,7 @@ const ABS_API_BASE_URL = "https://data.api.abs.gov.au/rest"
 function _package_version()
     project = joinpath(dirname(@__DIR__), "Project.toml")
     if isfile(project)
-        parsed = Pkg.TOML.parsefile(project)
+        parsed = TOML.parsefile(project)
         return string(get(parsed, "version", "dev"))
     end
     return "dev"
