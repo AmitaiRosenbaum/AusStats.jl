@@ -1,64 +1,193 @@
-const ABS_BASE_URL = "https://www.abs.gov.au"
-
-const ABS_TIME_SERIES_WORKBOOKS = Dict(
-    "6202.0" => (
+const ABS_SEED_CATALOGUES = [
+    (
+        cat_no = "6202.0",
         title = "Labour Force, Australia",
         description = "Monthly labour force estimates including employment, unemployment, participation, hours worked, and related time series.",
+        page_url = "https://www.abs.gov.au/statistics/labour/employment-and-unemployment/labour-force-australia",
+        file_title = "Table 1. Labour force status by Sex, Australia - Trend, Seasonally adjusted and Original",
         url = "https://www.abs.gov.au/statistics/labour/employment-and-unemployment/labour-force-australia/apr-2026/62020001.xlsx",
         filename = "6202.0_labour_force_table_001.xlsx",
-        supported = true,
+        table_no = "1",
+        is_timeseries = true,
+        is_cube = false,
     ),
-    "6401.0" => (
+    (
+        cat_no = "6401.0",
         title = "Consumer Price Index, Australia",
         description = "Quarterly consumer price inflation measures including CPI groups, capital cities, and analytical series.",
+        page_url = "https://www.abs.gov.au/statistics/economy/price-indexes-and-inflation/consumer-price-index-australia",
+        file_title = "Table 1. CPI: All groups, index numbers and percentage changes",
         url = "https://www.abs.gov.au/statistics/economy/price-indexes-and-inflation/consumer-price-index-australia/apr-2026/640101.xlsx",
         filename = "6401.0_cpi_table_001.xlsx",
-        supported = true,
+        table_no = "1",
+        is_timeseries = true,
+        is_cube = false,
     ),
-    "5206.0" => (
+    (
+        cat_no = "5206.0",
         title = "Australian National Accounts",
         description = "Quarterly national income, expenditure, product, GDP, and related national accounts time series.",
+        page_url = "https://www.abs.gov.au/statistics/economy/national-accounts/australian-national-accounts-national-income-expenditure-and-product",
+        file_title = "Key Aggregates",
         url = "https://www.abs.gov.au/statistics/economy/national-accounts/australian-national-accounts-national-income-expenditure-and-product/mar-2026/5206001_Key_Aggregates.xlsx",
         filename = "5206.0_national_accounts_key_aggregates.xlsx",
-        supported = true,
+        table_no = "1",
+        is_timeseries = true,
+        is_cube = false,
     ),
-    "6345.0" => (
+    (
+        cat_no = "6345.0",
         title = "Wage Price Index, Australia",
         description = "Quarterly wage price indexes by sector, state, industry, and original/seasonally adjusted trend series.",
+        page_url = "https://www.abs.gov.au/statistics/economy/price-indexes-and-inflation/wage-price-index-australia",
+        file_title = "Tables 2b to 9b. All quarterly series",
         url = "https://www.abs.gov.au/statistics/economy/price-indexes-and-inflation/wage-price-index-australia/mar-2026/63450Table2bto9b.xlsx",
         filename = "6345.0_wage_price_index_all_quarterly_series.xlsx",
-        supported = true,
+        table_no = "2",
+        is_timeseries = true,
+        is_cube = false,
     ),
-)
+]
 
 """
-    download_abs(cat_no; dest=default_cache_dir(), force=false)
+    refresh_abs!()
 
-Download the latest supported ABS Excel time-series workbook for `cat_no` and
-return the local path.
+Refresh the local ABS catalogue/file index and return the discovered files as a
+`DataFrame`. Seed catalogue entries are retained as an offline fallback.
 """
-function download_abs(cat_no::AbstractString; dest::AbstractString=default_cache_dir(), force::Bool=false)
-    source = _workbook_source(cat_no)
-    return _download_file(source.url; dest, filename=source.filename, force)
-end
+function refresh_abs!()
+    rows = Vector{NamedTuple}()
 
-function _workbook_source(cat_no::AbstractString)
-    key = strip(cat_no)
-    if !haskey(ABS_TIME_SERIES_WORKBOOKS, key)
-        supported = join(sort(collect(keys(ABS_TIME_SERIES_WORKBOOKS))), ", ")
-        throw(ArgumentError("unsupported ABS catalogue number `$cat_no`; supported values are: $supported"))
+    for seed in ABS_SEED_CATALOGUES
+        append!(rows, _discover_seed_files(seed))
     end
 
-    return ABS_TIME_SERIES_WORKBOOKS[key]
+    isempty(rows) && append!(rows, _seed_file_rows())
+    df = _file_rows_dataframe(rows)
+    _write_index(df)
+    return df
+end
+
+"""
+    catalogues(; refresh=false)
+
+Return known ABS catalogues as a `DataFrame`.
+"""
+function catalogues(; refresh::Bool=false)
+    indexed = _abs_index(; refresh)
+    out = DataFrame(cat_no=String[], title=String[], description=String[], page_url=String[], supported=Bool[])
+
+    for group in groupby(indexed, :cat_no; sort=true)
+        first_row = first(group)
+        push!(out, (
+            first_row.cat_no,
+            first_row.title,
+            first_row.description,
+            first_row.page_url,
+            true,
+        ))
+    end
+
+    return out
+end
+
+"""
+    files(cat_no=nothing; refresh=false)
+
+Return known downloadable ABS files. When `cat_no` is supplied, only files for
+that catalogue are returned.
+"""
+function files(cat_no=nothing; refresh::Bool=false)
+    df = _abs_index(; refresh)
+    cat_no === nothing && return df
+    needle = lowercase(strip(string(cat_no)))
+    return df[lowercase.(df.cat_no) .== needle, :]
+end
+
+"""
+    search_abs(query; refresh=false)
+
+Search known ABS catalogues and downloadable files.
+"""
+function search_abs(query::AbstractString; refresh::Bool=false)
+    needle = lowercase(strip(query))
+    df = _abs_index(; refresh)
+    isempty(needle) && return df
+
+    keep = map(eachrow(df)) do row
+        haystack = lowercase(join((
+            row.cat_no,
+            row.title,
+            row.description,
+            row.file_title,
+            row.filename,
+        ), " "))
+        occursin(needle, haystack)
+    end
+
+    return df[keep, :]
+end
+
+"""
+    download_abs(cat_no; file=nothing, release=:latest, dest=default_cache_dir(), force=false)
+
+Download an ABS time-series workbook for `cat_no` and return the local path.
+"""
+function download_abs(cat_no::AbstractString; file=nothing, release=:latest, dest::AbstractString=default_cache_dir(), force::Bool=false)
+    row = _select_file(cat_no; file, release, cube=false)
+    return _download_file(row.url; dest=joinpath(dest, "workbooks"), filename=row.filename, force)
+end
+
+"""
+    download_cube(cat_no; cube=nothing, release=:latest, dest=default_cache_dir(), force=false)
+
+Download an ABS data cube for `cat_no` and return the local path.
+"""
+function download_cube(cat_no::AbstractString; cube=nothing, release=:latest, dest::AbstractString=default_cache_dir(), force::Bool=false)
+    row = _select_file(cat_no; file=cube, release, cube=true)
+    return _download_file(row.url; dest=joinpath(dest, "cubes"), filename=row.filename, force)
+end
+
+function _select_file(cat_no::AbstractString; file=nothing, release=:latest, cube::Bool=false)
+    df = files(cat_no)
+    if isempty(df)
+        df = files(cat_no; refresh=true)
+    end
+    isempty(df) && throw(ArgumentError("no ABS files found for catalogue `$cat_no`"))
+
+    kind_keep = cube ? df.is_cube : df.is_timeseries
+    candidates = df[kind_keep, :]
+    isempty(candidates) && throw(ArgumentError("no $(cube ? "data cube" : "time-series workbook") files found for catalogue `$cat_no`"))
+
+    if release !== :latest
+        release_text = lowercase(strip(string(release)))
+        candidates = candidates[lowercase.(candidates.release_date) .== release_text, :]
+        isempty(candidates) && throw(ArgumentError("no files found for catalogue `$cat_no` and release `$release`"))
+    end
+
+    if file !== nothing
+        request = lowercase(strip(string(file)))
+        keep = map(eachrow(candidates)) do row
+            occursin(request, lowercase(row.file_title)) ||
+                occursin(request, lowercase(row.filename)) ||
+                (!ismissing(row.table_no) && request == lowercase(string(row.table_no)))
+        end
+        candidates = candidates[keep, :]
+        isempty(candidates) && throw(ArgumentError("no file matched `$file` for catalogue `$cat_no`"))
+    end
+
+    if !cube && file === nothing
+        table_one = candidates[candidates.table_no .== "1", :]
+        isempty(table_one) || (candidates = table_one)
+    end
+
+    sorted = sort(candidates, [:release_date, :filename], rev=[true, false])
+    return first(eachrow(sorted))
 end
 
 function _download_file(url::AbstractString; dest::AbstractString=tempdir(), filename=nothing, force::Bool=false)
     mkpath(dest)
-
-    target = joinpath(dest, something(filename, basename(split(url, '?'; limit=2)[1])))
-    if isempty(basename(target))
-        throw(ArgumentError("could not infer a filename from url; pass `filename`"))
-    end
+    target = joinpath(dest, something(filename, _url_filename(url)))
 
     if isfile(target) && !force
         return target
@@ -67,50 +196,232 @@ function _download_file(url::AbstractString; dest::AbstractString=tempdir(), fil
     return Downloads.download(url, target)
 end
 
-"""
-    search_abs(query)
-
-Search the locally known ABS catalogue map.
-"""
-function search_abs(query::AbstractString)
-    needle = lowercase(strip(query))
-    matches = DataFrame(cat_no=String[], title=String[], description=String[], supported=Bool[])
-
-    for cat_no in sort(collect(keys(ABS_TIME_SERIES_WORKBOOKS)))
-        source = ABS_TIME_SERIES_WORKBOOKS[cat_no]
-        haystack = lowercase(join((cat_no, source.title, source.description), " "))
-        if isempty(needle) || occursin(needle, haystack)
-            push!(matches, (cat_no, source.title, source.description, source.supported))
-        end
-    end
-
-    return matches
+function _abs_index(; refresh::Bool=false)
+    refresh && return refresh_abs!()
+    cached = _read_index()
+    cached === nothing || return cached
+    return _file_rows_dataframe(_seed_file_rows())
 end
 
-"""
-    search_abs(workbook, query; sheets=nothing)
+function _write_index(df::DataFrame)
+    path = _index_path()
+    mkpath(dirname(path))
+    rows = [Dict(String(name) => row[name] for name in names(df)) for row in eachrow(df)]
+    open(path, "w") do io
+        JSON3.write(io, rows)
+    end
+    return path
+end
 
-Search cell text in an ABS workbook and return matching sheet, row, column, and value.
-"""
-function search_abs(workbook::AbstractString, query::AbstractString; sheets=nothing)
-    needle = lowercase(query)
-    matches = DataFrame(sheet=String[], row=Int[], column=Int[], value=String[])
+function _read_index()
+    path = _index_path()
+    isfile(path) || return nothing
+    parsed = JSON3.read(read(path, String))
+    rows = NamedTuple[]
+    for item in parsed
+        push!(rows, _file_row(;
+            cat_no = String(item.cat_no),
+            title = String(item.title),
+            description = String(item.description),
+            page_url = String(item.page_url),
+            release_date = String(item.release_date),
+            file_title = String(item.file_title),
+            url = String(item.url),
+            filename = String(item.filename),
+            file_type = String(item.file_type),
+            table_no = String(item.table_no),
+            is_timeseries = Bool(item.is_timeseries),
+            is_cube = Bool(item.is_cube),
+        ))
+    end
+    return _file_rows_dataframe(rows)
+end
 
-    XLSX.openxlsx(workbook) do xf
-        for sheetname in _selected_sheets(xf, sheets)
-            sheet = xf[sheetname]
-            rows = _sheet_rows(sheet)
-            for (row_index, row) in enumerate(rows)
-                for (column_index, value) in enumerate(row)
-                    ismissing(value) && continue
-                    text = string(value)
-                    if occursin(needle, lowercase(text))
-                        push!(matches, (sheetname, row_index, column_index, text))
-                    end
-                end
+function _index_path()
+    return joinpath(_cache_subdir(:indexes), "abs_files.json")
+end
+
+function _discover_seed_files(seed)
+    rows = NamedTuple[]
+    try
+        html = _http_text(seed.page_url)
+        doc = Gumbo.parsehtml(html)
+        title = something(_first_text(doc, "h1"), seed.title)
+        description = something(_meta_content(doc, "description"), seed.description)
+        append!(rows, _discover_files_from_doc(doc, seed; title, description, page_url=seed.page_url))
+
+        if isempty(rows)
+            for release_url in _release_links(doc, seed)
+                release_html = _http_text(release_url)
+                release_doc = Gumbo.parsehtml(release_html)
+                append!(rows, _discover_files_from_doc(release_doc, seed; title, description, page_url=release_url))
+                isempty(rows) || break
             end
+        end
+    catch
+        return [_seed_to_row(seed)]
+    end
+
+    isempty(rows) && push!(rows, _seed_to_row(seed))
+    return rows
+end
+
+function _discover_files_from_doc(doc, seed; title, description, page_url)
+    rows = NamedTuple[]
+    release_date = something(_release_from_url(page_url), _release_from_url(seed.url), "")
+
+    for link in eachmatch(Cascadia.Selector("a[href]"), doc.root)
+        href = Gumbo.getattr(link, "href")
+        occursin(r"\.(xlsx|xls|csv)(\?|$)"i, href) || continue
+        url = _absolute_url(href)
+        label = strip(Gumbo.text(link))
+        isempty(label) && (label = _url_filename(url))
+        push!(rows, _file_row(;
+            cat_no = seed.cat_no,
+            title,
+            description,
+            page_url,
+            release_date = something(_release_from_url(url), release_date),
+            file_title = label,
+            url,
+            filename = _indexed_filename(seed.cat_no, url, label),
+            file_type = _file_type(url, label),
+            table_no = something(_table_no(label), _table_no(url), _table_no_from_filename(seed.cat_no, url), ""),
+            is_timeseries = !_looks_like_cube(label, url),
+            is_cube = _looks_like_cube(label, url),
+        ))
+    end
+
+    return rows
+end
+
+function _release_links(doc, seed)
+    urls = String[]
+    seed_path = replace(seed.page_url, ABS_BASE_URL => "")
+    title_key = lowercase(first(split(seed.title, ",")))
+
+    for link in eachmatch(Cascadia.Selector("a[href]"), doc.root)
+        href = Gumbo.getattr(link, "href")
+        label = lowercase(strip(Gumbo.text(link)))
+        url = _absolute_url(href)
+        path_match = startswith(url, seed.page_url * "/") || startswith(href, seed_path * "/")
+        title_match = occursin(title_key, label)
+        if path_match && title_match
+            push!(urls, url)
         end
     end
 
-    return matches
+    return unique(urls)
+end
+
+function _seed_file_rows()
+    return [_seed_to_row(seed) for seed in ABS_SEED_CATALOGUES]
+end
+
+function _seed_to_row(seed)
+    return _file_row(;
+        cat_no = seed.cat_no,
+        title = seed.title,
+        description = seed.description,
+        page_url = seed.page_url,
+        release_date = something(_release_from_url(seed.url), ""),
+        file_title = seed.file_title,
+        url = seed.url,
+        filename = seed.filename,
+        file_type = "xlsx",
+        table_no = seed.table_no,
+        is_timeseries = seed.is_timeseries,
+        is_cube = seed.is_cube,
+    )
+end
+
+function _file_row(; cat_no, title, description, page_url, release_date, file_title, url, filename, file_type, table_no, is_timeseries, is_cube)
+    return (
+        cat_no = String(cat_no),
+        title = String(title),
+        description = String(description),
+        page_url = String(page_url),
+        release_date = String(release_date),
+        file_title = String(file_title),
+        url = String(url),
+        filename = String(filename),
+        file_type = String(file_type),
+        table_no = String(table_no),
+        is_timeseries = Bool(is_timeseries),
+        is_cube = Bool(is_cube),
+    )
+end
+
+function _file_rows_dataframe(rows)
+    return DataFrame(
+        cat_no = [row.cat_no for row in rows],
+        title = [row.title for row in rows],
+        description = [row.description for row in rows],
+        page_url = [row.page_url for row in rows],
+        release_date = [row.release_date for row in rows],
+        file_title = [row.file_title for row in rows],
+        url = [row.url for row in rows],
+        filename = [row.filename for row in rows],
+        file_type = [row.file_type for row in rows],
+        table_no = [row.table_no for row in rows],
+        is_timeseries = [row.is_timeseries for row in rows],
+        is_cube = [row.is_cube for row in rows],
+    )
+end
+
+function _first_text(doc, selector::AbstractString)
+    nodes = eachmatch(Cascadia.Selector(selector), doc.root)
+    isempty(nodes) && return nothing
+    text = strip(Gumbo.text(first(nodes)))
+    return isempty(text) ? nothing : text
+end
+
+function _meta_content(doc, name::AbstractString)
+    selector = Cascadia.Selector("meta[name=\"$name\"]")
+    nodes = eachmatch(selector, doc.root)
+    isempty(nodes) && return nothing
+    content = Gumbo.getattr(first(nodes), "content")
+    text = strip(content)
+    return isempty(text) ? nothing : text
+end
+
+function _indexed_filename(cat_no::AbstractString, url::AbstractString, label::AbstractString)
+    ext = splitext(_url_filename(url))[2]
+    base = isempty(strip(label)) ? splitext(_url_filename(url))[1] : _safe_filename(label)
+    return _safe_filename(cat_no * "_" * base) * ext
+end
+
+function _file_type(url::AbstractString, label::AbstractString)
+    ext = lowercase(strip(splitext(_url_filename(url))[2], '.'))
+    isempty(ext) || return ext
+    _looks_like_cube(label, url) && return "cube"
+    return "unknown"
+end
+
+function _looks_like_cube(label::AbstractString, url::AbstractString)
+    text = lowercase(label * " " * url)
+    return occursin("data cube", text) || occursin("datacube", text) || occursin("cube", text)
+end
+
+function _table_no(value::AbstractString)
+    m = match(r"(?i)\btable\s*([0-9]+[a-z]?)\b", value)
+    m === nothing && return nothing
+    return m.captures[1]
+end
+
+function _table_no_from_filename(cat_no::AbstractString, url::AbstractString)
+    stem = splitext(_url_filename(url))[1]
+    digits = replace(cat_no, r"\D" => "")
+    m = match(Regex("^" * digits * "0*([0-9]{1,3}[a-z]?)", "i"), lowercase(stem))
+    m === nothing && return nothing
+    parsed = tryparse(Int, replace(m.captures[1], r"[A-Za-z]" => ""))
+    parsed === nothing && return lowercase(m.captures[1])
+    suffix = replace(lowercase(m.captures[1]), r"[0-9]" => "")
+    return string(parsed) * suffix
+end
+
+function _release_from_url(url::AbstractString)
+    m = match(r"/([a-z]{3}-[0-9]{4})/", lowercase(url))
+    m === nothing && return nothing
+    return m.captures[1]
 end
