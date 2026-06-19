@@ -31,6 +31,12 @@ function sample_workbook(path=tempname() * ".xlsx")
         sheet["B1"] = "B1234567"
         sheet["A2"] = "Apr-26"
         sheet["B2"] = 99.0
+
+        sheet = XLSX.addsheet!(xf, "Data10")
+        sheet["A1"] = "Series ID"
+        sheet["B1"] = "C1234567"
+        sheet["A2"] = "Apr-26"
+        sheet["B2"] = 101.0
     end
 
     return path
@@ -111,9 +117,11 @@ end
 
     sample_workbook(joinpath(default_cache_dir(), source.filename))
     @test first(read_abs("6202.0"; tables=["1"]).table) == "Data1"
+    @test unique(read_abs("6202.0"; tables=["1"]).table) == ["Data1"]
     @test first(read_abs("6202.0"; tables=["Table 1"]).table) == "Data1"
     @test first(read_abs("6202.0"; tables=["Data1"]).table) == "Data1"
     @test first(read_abs("6202.0"; tables=1).table) == "Data1"
+    @test_throws ArgumentError read_abs("6202.0"; tables=1, header_row=1)
 
     series = read_abs_series("A84423043A"; cat_no="6202.0")
     @test first(series.series_type) == "Seasonally adjusted"

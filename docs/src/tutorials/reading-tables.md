@@ -46,6 +46,8 @@ df = read_abs("6202.0"; sheet="Data1")
 
 Use `tables` when you want forgiving matching. Use `sheet` when you know the exact worksheet name.
 
+The `header_row` keyword applies to raw sheet reads. It is not used with `tables`, because table reads detect the first ABS period row and reshape the sheet into long format.
+
 ## Reading URLs or Local Files
 
 [`read_abs`](@ref) accepts:

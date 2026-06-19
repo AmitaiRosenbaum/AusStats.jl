@@ -14,8 +14,9 @@ function read_abs(path_or_url::AbstractString; sheet=nothing, tables=nothing, he
         sheetnames = XLSX.sheetnames(xf)
 
         if tables !== nothing
+            header_row === nothing || throw(ArgumentError("`header_row` is only supported for raw sheet reads; omit it when using `tables`"))
             selected = _matching_tables(sheetnames, tables)
-            return _read_tables(xf, selected; header_row)
+            return _read_tables(xf, selected)
         end
 
         sheetname = something(sheet, first(sheetnames))
@@ -23,7 +24,7 @@ function read_abs(path_or_url::AbstractString; sheet=nothing, tables=nothing, he
     end
 end
 
-function _read_tables(xf, sheetnames; header_row::Union{Int,Nothing}=nothing)
+function _read_tables(xf, sheetnames)
     out = _empty_tidy_abs()
 
     for sheetname in sheetnames
@@ -63,12 +64,13 @@ function _table_matches(sheetname::AbstractString, request)
     isempty(request_key) && return false
 
     sheet_key == request_key && return true
-    occursin(request_key, sheet_key) && return true
 
     request_number = _table_number(request)
-    request_number === nothing && return false
+    if request_number !== nothing
+        return any(number -> number == request_number, _numbers_in_text(sheetname))
+    end
 
-    return any(number -> number == request_number, _numbers_in_text(sheetname))
+    return occursin(request_key, sheet_key)
 end
 
 function _table_key(value)
