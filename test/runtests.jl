@@ -119,6 +119,26 @@ function discovery_fixture_rows()
     ))
 end
 
+function archive_fixture_releases()
+    html = read(joinpath(@__DIR__, "fixtures", "abs_archive_releases.html"), String)
+    doc = Gumbo.parsehtml(html)
+    seed = AustralianStatistics._seed_for_catalogue("6345.0")
+    return AustralianStatistics._release_rows_dataframe(AustralianStatistics._discover_releases_from_doc(doc, seed))
+end
+
+function historical_release_fixture_rows()
+    html = read(joinpath(@__DIR__, "fixtures", "abs_wpi_sep_2019_downloads.html"), String)
+    doc = Gumbo.parsehtml(html)
+    seed = AustralianStatistics._seed_for_catalogue("6345.0")
+    return AustralianStatistics._file_rows_dataframe(AustralianStatistics._discover_files_from_doc(
+        doc,
+        seed;
+        title=seed.title,
+        description=seed.description,
+        page_url="https://www.abs.gov.au/statistics/economy/price-indexes-and-inflation/wage-price-index-australia/sep-2019",
+    ))
+end
+
 @testset "AustralianStatistics v0.2" begin
     @test "6202.0" in search_abs("labour").cat_no
     @test "6401.0" in search_abs("cpi").cat_no
@@ -138,12 +158,38 @@ end
     @test any(discovered.is_cube)
     @test only(discovered[discovered.is_cube, :table_title]) == "Labour Force, Australia, detailed, quarterly, data cube"
 
+    archive_releases = archive_fixture_releases()
+    @test archive_releases.release_date == [Date(2019, 9, 1), Date(2019, 12, 1), Date(2020, 3, 1)]
+    @test all(startswith.(archive_releases.release_url, "https://www.abs.gov.au/"))
+
+    historical_files = historical_release_fixture_rows()
+    @test nrow(historical_files) == 2
+    @test historical_files.release_date == fill("sep-2019", 2)
+    @test "Table 1. Total hourly rates of pay excluding bonuses: Sector by State, Original" in historical_files.table_title
+    @test "2b" in historical_files.table_no
+    AustralianStatistics._write_release_index("6345.0", archive_releases)
+    AustralianStatistics._write_release_file_index("6345.0", Date(2019, 9, 1), historical_files)
+
     cache_dir = mktempdir()
     selected = AustralianStatistics._select_file("6202.0"; cube=false)
     cached_path = joinpath(cache_dir, "workbooks", selected.filename)
     mkpath(dirname(cached_path))
     touch(cached_path)
     @test download_abs("6202.0"; dest=cache_dir) == cached_path
+
+    historical_selected = AustralianStatistics._select_file("6345.0"; release=Date(2019, 9, 1), cube=false)
+    historical_path = joinpath(cache_dir, "workbooks", historical_selected.filename)
+    mkpath(dirname(historical_path))
+    touch(historical_path)
+    @test download_abs("6345.0"; release=Date(2019, 9, 1), dest=cache_dir) == historical_path
+    message = try
+        AustralianStatistics._files_for_release("6345.0", Date(2019, 10, 1); strict=true)
+        ""
+    catch error
+        sprint(showerror, error)
+    end
+    @test occursin("nearest known release dates", message)
+    @test occursin("2019-09-01", message)
 
     workbook = sample_workbook()
     tidy = tidy_abs(workbook; cat_no="6202.0", release_date="apr-2026")
@@ -208,5 +254,7 @@ if get(ENV, "AUSTRALIANSTATISTICS_ONLINE_TESTS", "false") == "true"
         downloaded = download_abs("6202.0"; force=true)
         @test isfile(downloaded)
         @test read_abs("6202.0"; tables=1) isa DataFrame
+        wpi = download_abs("6345.0"; release=Date(2019, 9, 1), force=true)
+        @test isfile(wpi)
     end
 end

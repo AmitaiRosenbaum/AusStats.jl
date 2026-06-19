@@ -14,7 +14,7 @@ using XLSX
 export read_abs, read_abs_url, read_abs_local, read_metadata, tidy_abs
 export read_series, separate_series, latest_date
 export download_abs, download_cube, read_cube, search_cubes
-export search_abs, catalogues, files, refresh_abs!
+export search_abs, catalogues, files, releases, refresh_abs!
 export dataflows, datastructure, read_api, read_api_url
 export default_cache_dir, cache_info, clear_cache!
 

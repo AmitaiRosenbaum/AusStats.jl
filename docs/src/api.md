@@ -8,6 +8,7 @@ This page documents the full public API for AustralianStatistics.jl.
 search_abs
 catalogues
 files
+releases
 refresh_abs!
 ```
 

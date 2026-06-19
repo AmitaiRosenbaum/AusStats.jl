@@ -105,6 +105,16 @@ function files(cat_no=nothing; refresh::Bool=false)
 end
 
 """
+    releases(cat_no; refresh=false)
+
+Return known ABS releases for `cat_no` as a `DataFrame`. `release_date` values
+are `Date`s representing the release month.
+"""
+function releases(cat_no::AbstractString; refresh::Bool=false)
+    return _release_index(cat_no; refresh)
+end
+
+"""
     search_abs(query; refresh=false)
 
 Search known ABS catalogues and downloadable files.
@@ -150,17 +160,24 @@ function download_cube(cat_no::AbstractString; cube=nothing, release=:latest, de
 end
 
 function _select_file(cat_no::AbstractString; file=nothing, release=:latest, cube::Bool=false)
-    df = files(cat_no)
+    df = release isa Date ? _files_for_release(cat_no, release; strict=false) : files(cat_no)
     if isempty(df)
-        df = files(cat_no; refresh=true)
+        df = release isa Date ? _files_for_release(cat_no, release; refresh=true, strict=true) : files(cat_no; refresh=true)
     end
-    isempty(df) && throw(ArgumentError("no ABS files found for catalogue `$cat_no`"))
+    if isempty(df)
+        if release isa Date
+            throw(ArgumentError("no downloadable files found for catalogue `$cat_no` and release `$release`"))
+        end
+        throw(ArgumentError("no ABS files found for catalogue `$cat_no`"))
+    end
 
     kind_keep = cube ? df.is_cube : df.is_timeseries
     candidates = df[kind_keep, :]
     isempty(candidates) && throw(ArgumentError("no $(cube ? "data cube" : "time-series workbook") files found for catalogue `$cat_no`"))
 
-    if release !== :latest
+    if release isa Date
+        # Date-based release selection is handled by `_files_for_release`.
+    elseif release !== :latest
         release_text = lowercase(strip(string(release)))
         candidates = candidates[lowercase.(candidates.release_date) .== release_text, :]
         isempty(candidates) && throw(ArgumentError("no files found for catalogue `$cat_no` and release `$release`"))
@@ -184,6 +201,43 @@ function _select_file(cat_no::AbstractString; file=nothing, release=:latest, cub
 
     sorted = sort(candidates, [:release_date, :filename], rev=[true, false])
     return first(eachrow(sorted))
+end
+
+function _files_for_release(cat_no::AbstractString, release::Date; refresh::Bool=false, strict::Bool=false)
+    if !refresh
+        cached_files = _read_release_file_index(cat_no, release)
+        cached_files === nothing || return cached_files
+    end
+
+    release_rows = releases(cat_no; refresh)
+    if isempty(release_rows)
+        return _empty_file_rows_dataframe()
+    end
+
+    matches = release_rows[release_rows.release_date .== release, :]
+    if isempty(matches)
+        strict && throw(ArgumentError(_missing_release_message(cat_no, release, release_rows.release_date)))
+        return _empty_file_rows_dataframe()
+    end
+
+    rows = NamedTuple[]
+    seed = _seed_for_catalogue(cat_no)
+    for row in eachrow(matches)
+        html = try
+            _http_text(row.release_url)
+        catch
+            ""
+        end
+        isempty(html) && continue
+        doc = Gumbo.parsehtml(html)
+        title = isempty(row.title) ? seed.title : row.title
+        append!(rows, _discover_files_from_doc(doc, seed; title, description=seed.description, page_url=row.release_url))
+    end
+
+    df = _file_rows_dataframe(rows)
+    filtered = isempty(df) ? df : df[df.release_date .== _release_key(release), :]
+    isempty(filtered) || _write_release_file_index(cat_no, release, filtered)
+    return filtered
 end
 
 function _download_file(url::AbstractString; dest::AbstractString=tempdir(), filename=nothing, force::Bool=false)
@@ -242,6 +296,189 @@ end
 
 function _index_path()
     return joinpath(_cache_subdir(:indexes), "abs_files.json")
+end
+
+function _release_index(cat_no::AbstractString; refresh::Bool=false)
+    refresh && return _refresh_release_index(cat_no)
+    cached = _read_release_index(cat_no)
+    cached === nothing || return cached
+    seed = _seed_for_catalogue(cat_no)
+    return _release_rows_dataframe([_seed_release_row(seed)])
+end
+
+function _refresh_release_index(cat_no::AbstractString)
+    seed = _seed_for_catalogue(cat_no)
+    rows = NamedTuple[]
+
+    try
+        html = _http_text(seed.page_url)
+        doc = Gumbo.parsehtml(html)
+        append!(rows, _discover_releases_from_doc(doc, seed))
+        for archive_url in _archive_links(doc, seed)
+            archive_html = _http_text(archive_url)
+            archive_doc = Gumbo.parsehtml(archive_html)
+            append!(rows, _discover_releases_from_doc(archive_doc, seed))
+        end
+    catch
+        rows = NamedTuple[]
+    end
+
+    if isempty(rows)
+        push!(rows, _seed_release_row(seed))
+    end
+
+    df = _release_rows_dataframe(rows)
+    _write_release_index(cat_no, df)
+    return df
+end
+
+function _write_release_index(cat_no::AbstractString, df::DataFrame)
+    path = _release_index_path(cat_no)
+    mkpath(dirname(path))
+    rows = [Dict(
+        "cat_no" => row.cat_no,
+        "title" => row.title,
+        "release_date" => string(row.release_date),
+        "release_url" => row.release_url,
+    ) for row in eachrow(df)]
+    open(path, "w") do io
+        JSON3.write(io, rows)
+    end
+    return path
+end
+
+function _read_release_index(cat_no::AbstractString)
+    path = _release_index_path(cat_no)
+    isfile(path) || return nothing
+    parsed = JSON3.read(read(path, String))
+    rows = NamedTuple[]
+    for item in parsed
+        date = tryparse(Date, String(item.release_date), dateformat"yyyy-mm-dd")
+        date === nothing && continue
+        push!(rows, _release_row(;
+            cat_no = String(item.cat_no),
+            title = String(item.title),
+            release_date = date,
+            release_url = String(item.release_url),
+        ))
+    end
+    return _release_rows_dataframe(rows)
+end
+
+function _release_index_path(cat_no::AbstractString)
+    return joinpath(_cache_subdir(:indexes), "releases_" * _safe_filename(cat_no) * ".json")
+end
+
+function _write_release_file_index(cat_no::AbstractString, release::Date, df::DataFrame)
+    path = _release_file_index_path(cat_no, release)
+    mkpath(dirname(path))
+    rows = [Dict(String(name) => row[name] for name in names(df)) for row in eachrow(df)]
+    open(path, "w") do io
+        JSON3.write(io, rows)
+    end
+    return path
+end
+
+function _read_release_file_index(cat_no::AbstractString, release::Date)
+    path = _release_file_index_path(cat_no, release)
+    isfile(path) || return nothing
+    parsed = JSON3.read(read(path, String))
+    rows = NamedTuple[]
+    for item in parsed
+        push!(rows, _file_row(;
+            cat_no = String(item.cat_no),
+            title = String(item.title),
+            description = String(item.description),
+            page_url = String(item.page_url),
+            release_date = String(item.release_date),
+            file_title = String(item.file_title),
+            url = String(item.url),
+            filename = String(item.filename),
+            file_type = String(item.file_type),
+            table_no = String(item.table_no),
+            table_title = hasproperty(item, :table_title) ? String(item.table_title) : String(item.file_title),
+            is_timeseries = Bool(item.is_timeseries),
+            is_cube = Bool(item.is_cube),
+        ))
+    end
+    return _file_rows_dataframe(rows)
+end
+
+function _release_file_index_path(cat_no::AbstractString, release::Date)
+    filename = "release_files_" * _safe_filename(cat_no) * "_" * _release_key(release) * ".json"
+    return joinpath(_cache_subdir(:indexes), filename)
+end
+
+function _discover_releases_from_doc(doc, seed)
+    by_url = Dict{String,NamedTuple}()
+
+    for link in eachmatch(Cascadia.Selector("a[href]"), doc.root)
+        href = Gumbo.getattr(link, "href")
+        url = _absolute_url(href)
+        _looks_like_release_url(url, seed) || continue
+
+        label = _clean_discovery_text(Gumbo.text(link))
+        release_date = something(_release_date_from_text(label), _release_date_from_url(url), nothing)
+        release_date === nothing && continue
+
+        row = _release_row(;
+            cat_no = seed.cat_no,
+            title = isempty(label) ? seed.title : label,
+            release_date,
+            release_url = _normalise_page_url(url),
+        )
+        by_url[row.release_url] = row
+    end
+
+    values_rows = collect(values(by_url))
+    isempty(values_rows) && push!(values_rows, _seed_release_row(seed))
+    return values_rows
+end
+
+function _archive_links(doc, seed)
+    urls = String[]
+
+    for link in eachmatch(Cascadia.Selector("a[href]"), doc.root)
+        href = Gumbo.getattr(link, "href")
+        label = lowercase(_clean_discovery_text(Gumbo.text(link)))
+        url = _normalise_page_url(_absolute_url(href))
+        startswith(url, seed.page_url) || continue
+        haystack = lowercase(url * " " * label)
+        if occursin("archive", haystack) || occursin("previous", haystack) || occursin("past releases", haystack)
+            push!(urls, url)
+        end
+    end
+
+    return unique(urls)
+end
+
+function _release_row(; cat_no, title, release_date::Date, release_url)
+    return (
+        cat_no = String(cat_no),
+        title = String(title),
+        release_date = release_date,
+        release_url = String(release_url),
+    )
+end
+
+function _seed_release_row(seed)
+    release_date = something(_release_date_from_url(seed.url), Date(1, 1, 1))
+    return _release_row(;
+        cat_no = seed.cat_no,
+        title = seed.title,
+        release_date,
+        release_url = _release_page_from_file_url(seed.url),
+    )
+end
+
+function _release_rows_dataframe(rows)
+    df = DataFrame(
+        cat_no = [row.cat_no for row in rows],
+        title = [row.title for row in rows],
+        release_date = [row.release_date for row in rows],
+        release_url = [row.release_url for row in rows],
+    )
+    return sort(unique(df, [:release_date, :release_url]), :release_date)
 end
 
 function _discover_seed_files(seed)
@@ -365,6 +602,7 @@ function _file_row(; cat_no, title, description, page_url, release_date, file_ti
 end
 
 function _file_rows_dataframe(rows)
+    isempty(rows) && return _empty_file_rows_dataframe()
     return DataFrame(
         cat_no = [row.cat_no for row in rows],
         title = [row.title for row in rows],
@@ -379,6 +617,24 @@ function _file_rows_dataframe(rows)
         table_title = [row.table_title for row in rows],
         is_timeseries = [row.is_timeseries for row in rows],
         is_cube = [row.is_cube for row in rows],
+    )
+end
+
+function _empty_file_rows_dataframe()
+    return DataFrame(
+        cat_no = String[],
+        title = String[],
+        description = String[],
+        page_url = String[],
+        release_date = String[],
+        file_title = String[],
+        url = String[],
+        filename = String[],
+        file_type = String[],
+        table_no = String[],
+        table_title = String[],
+        is_timeseries = Bool[],
+        is_cube = Bool[],
     )
 end
 
@@ -490,6 +746,11 @@ function _normalise_file_url(url::AbstractString)
     return split(clean, '?'; limit=2)[1]
 end
 
+function _normalise_page_url(url::AbstractString)
+    clean = split(strip(url), '#'; limit=2)[1]
+    return split(clean, '?'; limit=2)[1]
+end
+
 function _title_from_filename(url::AbstractString)
     stem = splitext(_url_filename(url))[1]
     stem = replace(stem, r"^[0-9]+[A-Za-z]*_?" => "")
@@ -533,7 +794,7 @@ function _looks_like_cube(label::AbstractString, url::AbstractString)
 end
 
 function _table_no(value::AbstractString)
-    m = match(r"(?i)\btable\s*([0-9]+[a-z]?)\b", value)
+    m = match(r"(?i)\btables?\s*([0-9]+[a-z]?)\b", value)
     m === nothing && return nothing
     return m.captures[1]
 end
@@ -553,4 +814,73 @@ function _release_from_url(url::AbstractString)
     m = match(r"/([a-z]{3}-[0-9]{4})/", lowercase(url))
     m === nothing && return nothing
     return m.captures[1]
+end
+
+function _release_date_from_url(url::AbstractString)
+    key = _release_from_url(url)
+    key === nothing && return nothing
+    return _release_date_from_text(key)
+end
+
+function _release_date_from_text(value::AbstractString)
+    text = lowercase(_clean_discovery_text(value))
+    m = match(r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*[- ]+([0-9]{4})\b", text)
+    if m !== nothing
+        return Date(parse(Int, m.captures[2]), _release_month_number(m.captures[1]), 1)
+    end
+
+    m = match(r"\b([0-9]{4})[- ]+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b", text)
+    if m !== nothing
+        return Date(parse(Int, m.captures[1]), _release_month_number(m.captures[2]), 1)
+    end
+
+    return nothing
+end
+
+function _release_key(date::Date)
+    months = ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
+    return months[month(date)] * "-" * string(year(date))
+end
+
+function _release_month_number(month_text::AbstractString)
+    months = Dict("jan" => 1, "feb" => 2, "mar" => 3, "apr" => 4, "may" => 5, "jun" => 6, "jul" => 7, "aug" => 8, "sep" => 9, "oct" => 10, "nov" => 11, "dec" => 12)
+    key = lowercase(month_text[1:3])
+    return months[key]
+end
+
+function _looks_like_release_url(url::AbstractString, seed)
+    clean = _normalise_page_url(url)
+    startswith(clean, seed.page_url * "/") || return false
+    occursin(r"/[a-z]{3}-[0-9]{4}/?$"i, clean) && return true
+    return _release_date_from_url(clean) !== nothing
+end
+
+function _release_page_from_file_url(url::AbstractString)
+    clean = _normalise_file_url(url)
+    key = _release_from_url(clean)
+    key === nothing && return dirname(clean)
+    marker = "/" * key * "/"
+    idx = findfirst(marker, clean)
+    idx === nothing && return dirname(clean)
+    stop = last(idx) - 1
+    return clean[1:stop]
+end
+
+function _seed_for_catalogue(cat_no::AbstractString)
+    key = strip(cat_no)
+    for seed in ABS_SEED_CATALOGUES
+        seed.cat_no == key && return seed
+    end
+
+    known = join(sort([seed.cat_no for seed in ABS_SEED_CATALOGUES]), ", ")
+    throw(ArgumentError("unsupported ABS catalogue number `$cat_no`; known seed catalogues are: $known"))
+end
+
+function _missing_release_message(cat_no::AbstractString, requested::Date, known_dates)
+    known = sort(collect(skipmissing(known_dates)))
+    isempty(known) && return "no releases are known for catalogue `$cat_no`; refresh the release index and try again"
+
+    nearest = sort(known; by=date -> abs(Dates.value(date - requested)))
+    shown = join(string.(first(nearest, min(3, length(nearest)))), ", ")
+    return "release $(requested) is not available for catalogue `$cat_no`; nearest known release dates are: $shown"
 end
