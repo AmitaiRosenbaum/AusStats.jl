@@ -1,5 +1,8 @@
 # AusStats.jl
 
+[![Stable documentation](https://img.shields.io/badge/docs-stable-blue.svg)](https://AmitaiRosenbaum.github.io/AusStats.jl/stable)
+[![Development documentation](https://img.shields.io/badge/docs-dev-blue.svg)](https://AmitaiRosenbaum.github.io/AusStats.jl/dev)
+
 AusStats.jl helps Julia users discover, download, read, and tidy
 Australian Bureau of Statistics data.
 

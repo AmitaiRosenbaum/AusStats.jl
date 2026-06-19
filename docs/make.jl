@@ -8,6 +8,7 @@ makedocs(;
     modules=[AusStats],
     format=Documenter.HTML(;
         prettyurls=get(ENV, "CI", "false") == "true",
+        edit_link="main",
         assets=[
             asset("assets/favicon.svg", class=:ico, islocal=true),
         ],
@@ -30,4 +31,9 @@ makedocs(;
         "API Reference" => "api.md",
     ],
     checkdocs=:exports,
+)
+
+deploydocs(;
+    repo="github.com/AmitaiRosenbaum/AusStats.jl.git",
+    devbranch="main",
 )
