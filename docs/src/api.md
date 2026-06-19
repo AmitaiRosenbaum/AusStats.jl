@@ -52,6 +52,7 @@ read_lfs_cube
 ```@docs
 dataflows
 datastructure
+api_key
 read_api
 read_api_url
 ```

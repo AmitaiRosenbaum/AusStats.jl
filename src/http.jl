@@ -9,11 +9,23 @@ end
 
 Base.showerror(io::IO, error::ABSError) = print(io, error.message)
 
-function _http_get(url::AbstractString; accept::AbstractString="*/*")
-    response = HTTP.get(url, ["User-Agent" => ABS_USER_AGENT, "Accept" => accept])
+function _http_get(url::AbstractString; accept::AbstractString="*/*", readtimeout::Real=60)
+    headers = ["User-Agent" => ABS_USER_AGENT, "Accept" => accept]
+    response = HTTP.get(url, headers; readtimeout=readtimeout, status_exception=false)
     status = response.status
-    200 <= status < 300 || throw(ABSError("ABS request failed with HTTP $status: $url"))
+    if !(200 <= status < 300)
+        guidance = _large_api_query_guidance(status)
+        message = string("ABS request failed with HTTP ", status, ": ", url, guidance)
+        throw(ABSError(message))
+    end
     return response
+end
+
+function _large_api_query_guidance(status::Integer)
+    if status in (400, 413, 414, 429, 500, 502, 503, 504)
+        return ". Large ABS API queries may fail; narrow the request with `filters`, `start_period`, or `end_period`."
+    end
+    return ""
 end
 
 function _http_text(url::AbstractString)

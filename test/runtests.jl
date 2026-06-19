@@ -2,6 +2,7 @@ using AustralianStatistics
 using DataFrames
 using Dates
 using Gumbo
+using JSON3
 using Test
 using XLSX
 
@@ -103,6 +104,100 @@ function labelled_cube_workbook(path=tempname() * ".xlsx")
         sheet["A2"] = "This sheet should remain generic if requested directly."
     end
     return path
+end
+
+function api_datastructure_fixture(flow_id="MOCK")
+    json = """
+    {
+      "data": {
+        "dataStructures": [
+          {
+            "dataStructureComponents": {
+              "dimensionList": {
+                "dimensions": [
+                  {
+                    "id": "SEX_ABS",
+                    "name": {"en": "Sex"},
+                    "position": 0,
+                    "localRepresentation": {"enumeration": {"id": "CL_SEX_ABS"}}
+                  },
+                  {
+                    "id": "ASGS_2016",
+                    "name": {"en": "Region"},
+                    "position": 1,
+                    "localRepresentation": {"enumeration": {"id": "CL_ASGS_2016"}}
+                  },
+                  {
+                    "id": "MEASURE",
+                    "name": {"en": "Measure"},
+                    "position": 2,
+                    "localRepresentation": {"enumeration": {"id": "CL_MEASURE"}}
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "codelists": [
+          {
+            "id": "CL_SEX_ABS",
+            "items": [
+              {"id": "1", "name": {"en": "Male"}},
+              {"id": "2", "name": {"en": "Female"}},
+              {"id": "3", "name": {"en": "Persons"}}
+            ]
+          },
+          {
+            "id": "CL_ASGS_2016",
+            "items": [
+              {"id": "0", "name": {"en": "Australia"}},
+              {"id": "1", "name": {"en": "New South Wales"}}
+            ]
+          },
+          {
+            "id": "CL_MEASURE",
+            "items": [
+              {"id": "EMP", "name": {"en": "Employed"}}
+            ]
+          }
+        ]
+      }
+    }
+    """
+    path = joinpath(default_cache_dir(), "api", "datastructure_$(lowercase(flow_id)).json")
+    mkpath(dirname(path))
+    write(path, json)
+    return path
+end
+
+function api_data_fixture()
+    return JSON3.read("""
+    {
+      "structure": {
+        "dimensions": {
+          "series": [
+            {"id": "SEX_ABS", "values": [{"id": "3"}]},
+            {"id": "ASGS_2016", "values": [{"id": "0"}]}
+          ],
+          "observation": [
+            {"id": "TIME_PERIOD", "values": [{"id": "2024-Q1"}, {"id": "2024-Q2"}]}
+          ]
+        }
+      },
+      "dataSets": [
+        {
+          "series": {
+            "0:0": {
+              "observations": {
+                "0": [10.0],
+                "1": ["11.5"]
+              }
+            }
+          }
+        }
+      ]
+    }
+    """)
 end
 
 function convenience_fixture_index()
@@ -554,6 +649,34 @@ end
     end
     @test occursin("could not read Consumer Price Index catalogue `6401.0`", error_message)
     @test occursin("files(\"6401.0\"; refresh=true)", error_message)
+
+    api_datastructure_fixture()
+    structure = datastructure("MOCK")
+    @test names(structure) == ["dimension_id", "dimension_name", "position", "code", "label", "code_position"]
+    @test nrow(structure) == 6
+    @test structure[structure.dimension_id .== "SEX_ABS", :code] == ["1", "2", "3"]
+    @test structure[structure.dimension_id .== "SEX_ABS", :label] == ["Male", "Female", "Persons"]
+    @test api_key("MOCK"; filters=(sex_abs="3", asgs_2016="0")) == "3.0."
+    @test api_key("MOCK"; filters=(sex_abs="Persons", measure="EMP")) == "3..EMP"
+    @test api_key("MOCK"; filters=Dict(:sex_abs => ["1", "2"])) == "1+2.."
+    @test_throws ArgumentError api_key("MOCK"; filters=(unknown="1",))
+    @test_throws ArgumentError api_key("MOCK"; filters=(sex_abs="9",))
+
+    filtered_url = AustralianStatistics._api_request_url("MOCK"; filters=(sex_abs="3", asgs_2016="0"), start_period="2024-Q1", params=(detail="dataonly",))
+    @test occursin("/data/ABS/MOCK/3.0./all?", filtered_url)
+    @test occursin("detail=dataonly", filtered_url)
+    @test occursin("startPeriod=2024-Q1", filtered_url)
+    explicit_url = AustralianStatistics._api_request_url("MOCK"; key="1.0.EMP", end_period="2024-Q2")
+    @test occursin("/data/ABS/MOCK/1.0.EMP/all?endPeriod=2024-Q2", explicit_url)
+    @test_throws ArgumentError AustralianStatistics._api_request_url("MOCK"; key="1", filters=(sex_abs="3",))
+
+    api_rows = AustralianStatistics._sdmx_data_to_dataframe(api_data_fixture())
+    @test nrow(api_rows) == 2
+    @test api_rows.period == ["2024-Q1", "2024-Q2"]
+    @test api_rows.date == [Date(2024, 1, 1), Date(2024, 4, 1)]
+    @test api_rows.value == [10.0, 11.5]
+    @test api_rows.SEX_ABS == ["3", "3"]
+    @test api_rows.ASGS_2016 == ["0", "0"]
 
     info = cache_info()
     @test all(name -> name in names(info), ["kind", "file", "path", "size", "modified"])
