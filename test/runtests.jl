@@ -5,40 +5,70 @@ using Test
 using XLSX
 
 function sample_workbook(path=tempname() * ".xlsx")
-
+    mkpath(dirname(path))
     XLSX.openxlsx(path, mode="w") do xf
         sheet = xf[1]
         XLSX.rename!(sheet, "Data1")
         sheet["A1"] = "Series ID"
         sheet["B1"] = "A84423043A"
+        sheet["C1"] = "B84423043B"
         sheet["A2"] = "Data item"
-        sheet["B2"] = "Employed total"
+        sheet["B2"] = "Employed total ; Persons ; Australia"
+        sheet["C2"] = "Unemployed total"
         sheet["A3"] = "Unit"
         sheet["B3"] = "Persons"
+        sheet["C3"] = "Persons"
         sheet["A4"] = "Frequency"
         sheet["B4"] = "Monthly"
+        sheet["C4"] = "Monthly"
         sheet["A5"] = "Series Type"
         sheet["B5"] = "Seasonally adjusted"
+        sheet["C5"] = "Original"
         sheet["A6"] = "Data Type"
         sheet["B6"] = "Stock"
-        sheet["A7"] = "Apr-26"
-        sheet["B7"] = 12.5
-        sheet["A8"] = "May-26"
-        sheet["B8"] = "not numeric"
+        sheet["C6"] = "Stock"
+        sheet["A7"] = "Collection Month"
+        sheet["B7"] = "May"
+        sheet["C7"] = "May"
+        sheet["A8"] = "Series Start"
+        sheet["B8"] = "Apr-2026"
+        sheet["C8"] = "Apr-2026"
+        sheet["A9"] = "Apr-26"
+        sheet["B9"] = 12.5
+        sheet["C9"] = 8.0
+        sheet["A10"] = "May-26"
+        sheet["B10"] = "not numeric"
+        sheet["C10"] = 9.0
 
         sheet = XLSX.addsheet!(xf, "Table 2")
         sheet["A1"] = "Series ID"
-        sheet["B1"] = "B1234567"
-        sheet["A2"] = "Apr-26"
+        sheet["B1"] = "C1234567"
+        sheet["A2"] = "2024-Q1"
         sheet["B2"] = 99.0
 
         sheet = XLSX.addsheet!(xf, "Data10")
         sheet["A1"] = "Series ID"
-        sheet["B1"] = "C1234567"
-        sheet["A2"] = "Apr-26"
+        sheet["B1"] = "D1234567"
+        sheet["A2"] = "2024"
         sheet["B2"] = 101.0
+
+        XLSX.addsheet!(xf, "Notes")
     end
 
+    return path
+end
+
+function cube_workbook(path=tempname() * ".xlsx")
+    XLSX.openxlsx(path, mode="w") do xf
+        sheet = xf[1]
+        XLSX.rename!(sheet, "Cube 1")
+        sheet["A1"] = "State"
+        sheet["B1"] = "Value"
+        sheet["A2"] = "NSW"
+        sheet["B2"] = 1.0
+        sheet["A3"] = "VIC"
+        sheet["B3"] = 2.0
+    end
     return path
 end
 
@@ -75,34 +105,35 @@ function period_workbook()
     return path
 end
 
-@testset "AustralianStatistics smoke tests" begin
-    labour = search_abs("labour")
-    @test "6202.0" in labour.cat_no
-
-    cpi = search_abs("cpi")
-    @test "6401.0" in cpi.cat_no
+@testset "AustralianStatistics v0.2" begin
+    @test "6202.0" in search_abs("labour").cat_no
+    @test "6401.0" in search_abs("cpi").cat_no
+    @test "6202.0" in catalogues().cat_no
+    @test nrow(files("6202.0")) >= 1
 
     cache_dir = mktempdir()
-    source = AustralianStatistics.ABS_TIME_SERIES_WORKBOOKS["6202.0"]
-    cached_path = joinpath(cache_dir, source.filename)
+    selected = AustralianStatistics._select_file("6202.0"; cube=false)
+    cached_path = joinpath(cache_dir, "workbooks", selected.filename)
+    mkpath(dirname(cached_path))
     touch(cached_path)
     @test download_abs("6202.0"; dest=cache_dir) == cached_path
-    @test isfile(cached_path)
 
     workbook = sample_workbook()
-
-    tidy = tidy_abs(workbook)
+    tidy = tidy_abs(workbook; cat_no="6202.0", release_date="apr-2026")
     @test tidy isa DataFrame
-    @test names(tidy) == ["table", "date", "series_id", "value", "unit", "series_type", "data_type", "frequency", "series"]
+    @test names(tidy) == [
+        "cat_no", "release_date", "table", "table_no", "table_title", "sheet", "sheet_no",
+        "date", "series_id", "value", "unit", "series_type", "data_type", "frequency",
+        "collection_month", "series_start", "series",
+    ]
     @test tidy.date[1] == Date(2026, 4, 1)
-    @test tidy.date[2] == Date(2026, 5, 1)
-    @test tidy.value[1] == 12.5
     @test ismissing(tidy.value[2])
     @test tidy.frequency[1] == "monthly"
-    @test tidy.series[1] == "Employed total"
-    @test tidy.unit[1] == "Persons"
-    @test tidy.series_type[1] == "Seasonally adjusted"
-    @test tidy.data_type[1] == "Stock"
+    @test tidy.series[1] == "Employed total ; Persons ; Australia"
+    @test tidy.collection_month[1] == "May"
+    @test tidy.series_start[1] == "Apr-2026"
+    @test tidy.cat_no[1] == "6202.0"
+    @test "Notes" ∉ tidy.table
 
     periods = tidy_abs(period_workbook())
     @test periods[periods.series_id .== "M1234567", :date] == [Date(2024, 1, 1), Date(2024, 2, 1)]
@@ -112,18 +143,43 @@ end
     @test periods[periods.series_id .== "Y1234567", :date] == [Date(2024, 1, 1)]
     @test periods[periods.series_id .== "Y1234567", :frequency] == ["annual"]
 
-    raw = read_abs(workbook)
-    @test raw isa DataFrame
+    @test read_abs_local(workbook) isa DataFrame
+    @test read_abs(workbook) isa DataFrame
+    @test read_abs(workbook; tidy=false) isa DataFrame
+    @test unique(read_abs(workbook; tables=["1"]).table) == ["Data1"]
+    @test unique(read_abs(workbook; tables=["Table 1"]).table) == ["Data1"]
+    @test unique(read_abs(workbook; tables=["Data1"]).table) == ["Data1"]
+    @test unique(read_abs(workbook; tables=1).table) == ["Data1"]
 
-    sample_workbook(joinpath(default_cache_dir(), source.filename))
-    @test first(read_abs("6202.0"; tables=["1"]).table) == "Data1"
-    @test unique(read_abs("6202.0"; tables=["1"]).table) == ["Data1"]
-    @test first(read_abs("6202.0"; tables=["Table 1"]).table) == "Data1"
-    @test first(read_abs("6202.0"; tables=["Data1"]).table) == "Data1"
-    @test first(read_abs("6202.0"; tables=1).table) == "Data1"
-    @test_throws ArgumentError read_abs("6202.0"; tables=1, header_row=1)
+    metadata = read_metadata(workbook; tables=1)
+    @test nrow(metadata) == 2
+    @test "date" ∉ names(metadata)
+    @test "value" ∉ names(metadata)
 
-    series = read_abs_series("A84423043A"; cat_no="6202.0")
-    @test first(series.series_type) == "Seasonally adjusted"
-    @test first(series.data_type) == "Stock"
+    separated = separate_series(metadata)
+    @test "series_part_1" in names(separated)
+    @test separated.series_part_1[1] == "Employed total"
+    @test latest_date(tidy) == Date(2026, 5, 1)
+
+    sample_workbook(joinpath(default_cache_dir(), "workbooks", selected.filename))
+    series = read_series(["a84423043a"]; cat_no="6202.0")
+    @test nrow(series) == 2
+    @test unique(series.series_id) == ["A84423043A"]
+
+    cube = read_cube(cube_workbook())
+    @test cube isa DataFrame
+    @test cube.sheet == ["Cube 1", "Cube 1"]
+
+    info = cache_info()
+    @test all(name -> name in names(info), ["kind", "file", "path", "size", "modified"])
+end
+
+if get(ENV, "AUSTRALIANSTATISTICS_ONLINE_TESTS", "false") == "true"
+    @testset "AustralianStatistics online integration" begin
+        refreshed = refresh_abs!()
+        @test nrow(refreshed) >= 1
+        downloaded = download_abs("6202.0"; force=true)
+        @test isfile(downloaded)
+        @test read_abs("6202.0"; tables=1) isa DataFrame
+    end
 end
