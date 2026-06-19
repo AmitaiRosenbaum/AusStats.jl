@@ -4,7 +4,7 @@ ABS workbooks often contain many sheets. [`read_abs`](@ref) provides a forgiving
 
 ## Read the First Sheet
 
-When no `sheet` or `tables` argument is supplied, [`read_abs`](@ref) reads the first worksheet.
+When no `sheet` or `tables` argument is supplied, [`read_abs`](@ref) reads the first worksheet as a raw table.
 
 ```julia
 df = read_abs("6202.0")
@@ -34,6 +34,8 @@ If multiple sheets match, the result is combined into one `DataFrame` and a `tab
 df = read_abs("6202.0"; tables=["1", "2"])
 ```
 
+The table output is tidy long-format time-series data with one row per series-date observation.
+
 ## Read a Specific Sheet
 
 You can still select an exact worksheet with `sheet`:
@@ -43,14 +45,6 @@ df = read_abs("6202.0"; sheet="Data1")
 ```
 
 Use `tables` when you want forgiving matching. Use `sheet` when you know the exact worksheet name.
-
-## Header Rows
-
-Some ABS sheets include notes or title rows above the tabular data. The parser attempts to detect a header row automatically, but you can override it:
-
-```julia
-df = read_abs("6202.0"; tables=1, header_row=10)
-```
 
 ## Reading URLs or Local Files
 

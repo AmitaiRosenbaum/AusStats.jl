@@ -8,7 +8,7 @@ Download a workbook and tidy it:
 
 ```julia
 path = download_abs("6401.0")
-tidy = tidy_abs(path; cat_no="6401.0")
+tidy = tidy_abs(path)
 ```
 
 The result is a `DataFrame` with one row per observation where possible.
@@ -19,15 +19,15 @@ The result is a `DataFrame` with one row per observation where possible.
 
 | Column | Meaning |
 | --- | --- |
-| `series_id` | ABS series identifier |
-| `series` | series description or data item |
-| `unit` | unit of measure |
-| `frequency` | `monthly`, `quarterly`, `annual`, or `unknown` |
-| `seasonal_adjustment` | seasonal adjustment status or series type |
 | `table` | source worksheet name |
-| `cat_no` | catalogue number, when supplied |
 | `date` | period start as a `Date` |
+| `series_id` | ABS series identifier |
 | `value` | numeric observation as `Float64` or `missing` |
+| `unit` | unit of measure |
+| `series_type` | series type, such as seasonally adjusted or original, where available |
+| `data_type` | ABS data type, where available |
+| `frequency` | `monthly`, `quarterly`, `annual`, or `unknown` |
+| `series` | series description or data item |
 
 ## Period Parsing
 

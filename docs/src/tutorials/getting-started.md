@@ -42,15 +42,17 @@ To force a fresh download:
 path = download_abs("6202.0"; force=true)
 ```
 
-## Read Raw Spreadsheet Data
+## Read an ABS Table
 
-Use [`read_abs`](@ref) to read a workbook sheet into a `DataFrame`.
+Use [`read_abs`](@ref) with `tables` to read ABS time-series sheets into tidy long format.
 
 ```julia
-df = read_abs("6202.0")
+df = read_abs("6202.0"; tables=["1"])
 ```
 
-You can also pass a local workbook path:
+The result has one row per series-date observation. Metadata rows such as `Unit`, `Series Type`, `Data Type`, `Frequency`, and `Series ID` are extracted into columns, not returned as data rows.
+
+You can still read the first worksheet as a raw table by omitting `tables`:
 
 ```julia
 df = read_abs(path)
@@ -66,15 +68,15 @@ tidy = tidy_abs(path)
 
 The tidy output includes metadata columns where they can be found:
 
-- `series_id`
-- `series`
-- `unit`
-- `frequency`
-- `seasonal_adjustment`
 - `table`
-- `cat_no`
 - `date`
+- `series_id`
 - `value`
+- `unit`
+- `series_type`
+- `data_type`
+- `frequency`
+- `series`
 
 ## Find a Single Series
 

@@ -78,16 +78,19 @@ function _clean_cell(value)
 end
 
 """
-    tidy_abs(path; metadata=true, cat_no=missing)
+    tidy_abs(path; metadata=true)
 
 Parse an ABS Excel time-series workbook into a tidy `DataFrame`.
+
+The result has columns `table`, `date`, `series_id`, `value`, `unit`,
+`series_type`, `data_type`, `frequency`, and `series`.
 """
-function tidy_abs(path::AbstractString; metadata::Bool=true, cat_no=missing)
+function tidy_abs(path::AbstractString; metadata::Bool=true)
     out = _empty_tidy_abs()
 
     XLSX.openxlsx(path) do xf
         for sheetname in XLSX.sheetnames(xf)
-            sheet_rows = _tidy_sheet(xf[sheetname], sheetname, cat_no; metadata)
+            sheet_rows = _tidy_sheet(xf[sheetname], sheetname; metadata)
             isempty(sheet_rows) || append!(out, sheet_rows)
         end
     end
@@ -97,32 +100,33 @@ end
 
 function _empty_tidy_abs()
     return DataFrame(
-        series_id = String[],
-        series = Union{Missing,String}[],
-        unit = Union{Missing,String}[],
-        frequency = Union{Missing,String}[],
-        seasonal_adjustment = Union{Missing,String}[],
         table = String[],
-        cat_no = Union{Missing,String}[],
         date = Date[],
+        series_id = String[],
         value = Union{Missing,Float64}[],
+        unit = Union{Missing,String}[],
+        series_type = Union{Missing,String}[],
+        data_type = Union{Missing,String}[],
+        frequency = Union{Missing,String}[],
+        series = Union{Missing,String}[],
     )
 end
 
-function _tidy_sheet(sheet, sheetname::AbstractString, cat_no; metadata::Bool=true)
+function _tidy_sheet(sheet, sheetname::AbstractString; metadata::Bool=true)
     rows = _sheet_rows(sheet)
     isempty(rows) && return _empty_tidy_abs()
     all(_row_is_empty, rows) && return _empty_tidy_abs()
 
-    tidy = _tidy_sheet_time_down(rows, sheetname, cat_no; metadata)
+    tidy = _tidy_sheet_time_down(rows, sheetname; metadata)
     isempty(tidy) || return tidy
 
-    return _tidy_sheet_time_across(rows, sheetname, cat_no; metadata)
+    return _tidy_sheet_time_across(rows, sheetname; metadata)
 end
 
-function _tidy_sheet_time_down(rows, sheetname::AbstractString, cat_no; metadata::Bool=true)
-    date_col, date_rows = _best_date_column(rows)
-    if date_col === nothing || isempty(date_rows)
+function _tidy_sheet_time_down(rows, sheetname::AbstractString; metadata::Bool=true)
+    date_col = 1
+    date_rows = _date_rows_in_column(rows, date_col)
+    if isempty(date_rows)
         return _empty_tidy_abs()
     end
 
@@ -137,27 +141,26 @@ function _tidy_sheet_time_down(rows, sheetname::AbstractString, cat_no; metadata
         series_id = _series_id_for_column(rows, col, first_date_row, labels)
         series = metadata ? _series_name_for_column(rows, col, first_date_row, labels) : missing
         unit = metadata ? _metadata_for_column(rows, col, labels, _unit_labels()) : missing
+        series_type = metadata ? _metadata_for_column(rows, col, labels, _series_type_labels()) : missing
+        data_type = metadata ? _metadata_for_column(rows, col, labels, _data_type_labels()) : missing
         frequency = metadata ? _normalise_frequency(_metadata_for_column(rows, col, labels, _frequency_labels())) : "unknown"
         frequency == "unknown" && (frequency = _infer_frequency([rows[row_index][date_col] for row_index in date_rows]))
-        seasonal_adjustment = metadata ? _metadata_for_column(rows, col, labels, _seasonal_adjustment_labels()) : missing
+        ismissing(series) && (series = _series_column_name(col))
 
         for row_index in date_rows
             date = _period_start(rows[row_index][date_col], frequency)
             date === nothing && continue
 
             value = _parse_abs_float(get(rows[row_index], col, missing))
-            if ismissing(value) && _empty_series_value(get(rows[row_index], col, missing))
-                continue
-            end
 
-            push!(out, (series_id, series, unit, frequency, seasonal_adjustment, string(sheetname), _clean_cat_no(cat_no), date, value))
+            push!(out, (string(sheetname), date, series_id, value, unit, series_type, data_type, frequency, series))
         end
     end
 
     return out
 end
 
-function _tidy_sheet_time_across(rows, sheetname::AbstractString, cat_no; metadata::Bool=true)
+function _tidy_sheet_time_across(rows, sheetname::AbstractString; metadata::Bool=true)
     header_row, date_cols = _best_date_header_row(rows)
     if header_row === nothing || isempty(date_cols)
         return _empty_tidy_abs()
@@ -173,24 +176,32 @@ function _tidy_sheet_time_across(rows, sheetname::AbstractString, cat_no; metada
 
         series = metadata ? _series_name_for_row(row, rows[header_row]) : missing
         unit = metadata ? _metadata_for_row(row, rows[header_row], _unit_labels()) : missing
+        series_type = metadata ? _metadata_for_row(row, rows[header_row], _series_type_labels()) : missing
+        data_type = metadata ? _metadata_for_row(row, rows[header_row], _data_type_labels()) : missing
         frequency = metadata ? _normalise_frequency(_metadata_for_row(row, rows[header_row], _frequency_labels())) : "unknown"
         frequency == "unknown" && (frequency = _infer_frequency([rows[header_row][col] for col in date_cols]))
-        seasonal_adjustment = metadata ? _metadata_for_row(row, rows[header_row], _seasonal_adjustment_labels()) : missing
+        ismissing(series) && (series = _clean_text(isempty(row) ? missing : first(row)))
 
         for col in date_cols
             date = _period_start(rows[header_row][col], frequency)
             date === nothing && continue
 
             value = _parse_abs_float(get(row, col, missing))
-            if ismissing(value) && _empty_series_value(get(row, col, missing))
-                continue
-            end
 
-            push!(out, (series_id, series, unit, frequency, seasonal_adjustment, string(sheetname), _clean_cat_no(cat_no), date, value))
+            push!(out, (string(sheetname), date, series_id, value, unit, series_type, data_type, frequency, series))
         end
     end
 
     return out
+end
+
+function _date_rows_in_column(rows, date_col::Int)
+    date_rows = Int[]
+    for (row_index, row) in enumerate(rows)
+        date_col <= length(row) || continue
+        _parse_abs_date(row[date_col]) === nothing || push!(date_rows, row_index)
+    end
+    return date_rows
 end
 
 function _best_date_column(rows)
@@ -239,12 +250,14 @@ function _series_columns_time_down(rows, date_col::Int, date_rows)
 
     for col in 1:max_cols
         col == date_col && continue
-        values = (get(rows[row_index], col, missing) for row_index in date_rows)
-        has_value = any(value -> !ismissing(_parse_abs_float(value)), values)
-        has_value && push!(columns, col)
+        _column_has_content(rows, col) && push!(columns, col)
     end
 
     return columns
+end
+
+function _column_has_content(rows, col::Int)
+    return any(row -> col <= length(row) && !_empty_series_value(row[col]), rows)
 end
 
 function _metadata_labels(rows, first_date_row::Int, date_col::Int)
@@ -274,7 +287,7 @@ function _series_id_for_column(rows, col::Int, first_date_row::Int, labels)
         _looks_like_abs_series_id(id) && return id
     end
 
-    return _clean_text(get(rows[max(first_date_row - 1, 1)], col, missing))
+    return _series_column_name(col)
 end
 
 function _metadata_for_column(rows, col::Int, labels, candidates)
@@ -290,14 +303,6 @@ end
 function _series_name_for_column(rows, col::Int, first_date_row::Int, labels)
     value = _metadata_for_column(rows, col, labels, _series_labels())
     ismissing(value) || return value
-
-    for row_index in reverse(1:(first_date_row - 1))
-        text = _clean_text(get(rows[row_index], col, missing))
-        if !isempty(text) && !_looks_like_abs_series_id(text)
-            return text
-        end
-    end
-
     return missing
 end
 
@@ -487,16 +492,15 @@ function _metadata_key(value)
     return replace(text, r"[^a-z0-9]" => "")
 end
 
-_series_id_labels() = ("seriesid", "seriesnumber", "series")
+_series_id_labels() = ("seriesid", "seriesnumber")
 _series_labels() = ("dataitem", "series", "seriesdescription", "description", "title")
 _unit_labels() = ("unit", "units", "unitofmeasure")
 _frequency_labels() = ("frequency", "freq")
-_seasonal_adjustment_labels() = ("seasonaladjustment", "seasonaladjustmenttype", "adjustment", "series type", "seriestype")
+_series_type_labels() = ("seriestype", "series type", "seasonaladjustment", "seasonaladjustmenttype", "adjustment")
+_data_type_labels() = ("datatype", "data type")
 
-function _clean_cat_no(cat_no)
-    ismissing(cat_no) && return missing
-    text = strip(string(cat_no))
-    return isempty(text) ? missing : text
+function _series_column_name(col::Int)
+    return "Column $col"
 end
 
 function _looks_like_abs_series_id(text::AbstractString)

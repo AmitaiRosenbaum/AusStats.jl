@@ -1,8 +1,11 @@
 """
     read_abs(path_or_url; sheet=nothing, tables=nothing, header_row=nothing, download_dir=tempdir())
 
-Read an ABS spreadsheet into a `DataFrame`. When `sheet` and `tables` are
-omitted, the first worksheet is read.
+Read an ABS spreadsheet into a `DataFrame`.
+
+When `tables` is supplied, matching ABS time-series sheets are parsed into tidy
+long format. When `sheet` and `tables` are omitted, the first worksheet is read
+as a raw table.
 """
 function read_abs(path_or_url::AbstractString; sheet=nothing, tables=nothing, header_row::Union{Int,Nothing}=nothing, download_dir::AbstractString=tempdir())
     path = _local_path(path_or_url; download_dir)
@@ -21,13 +24,12 @@ function read_abs(path_or_url::AbstractString; sheet=nothing, tables=nothing, he
 end
 
 function _read_tables(xf, sheetnames; header_row::Union{Int,Nothing}=nothing)
-    out = DataFrame()
+    out = _empty_tidy_abs()
 
     for sheetname in sheetnames
-        table = _read_sheet(xf[sheetname]; header_row)
+        table = _tidy_sheet(xf[sheetname], sheetname)
         isempty(table) && continue
-        table[!, :table] .= sheetname
-        append!(out, table; cols=:union)
+        append!(out, table)
     end
 
     return out
@@ -98,7 +100,7 @@ function read_abs_series(series_id::AbstractString; cat_no=nothing, cache::Bool=
 
     for catalogue in catalogues
         path = _catalogue_workbook(catalogue; cache)
-        matches = _series_matches(tidy_abs(path; cat_no=catalogue), series_id)
+        matches = _series_matches(tidy_abs(path), series_id)
         isempty(matches) || append!(out, matches)
     end
 

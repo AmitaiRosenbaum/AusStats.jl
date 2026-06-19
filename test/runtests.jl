@@ -17,12 +17,14 @@ function sample_workbook(path=tempname() * ".xlsx")
         sheet["B3"] = "Persons"
         sheet["A4"] = "Frequency"
         sheet["B4"] = "Monthly"
-        sheet["A5"] = "Seasonal adjustment"
+        sheet["A5"] = "Series Type"
         sheet["B5"] = "Seasonally adjusted"
-        sheet["A6"] = "Apr-26"
-        sheet["B6"] = 12.5
-        sheet["A7"] = "May-26"
-        sheet["B7"] = ""
+        sheet["A6"] = "Data Type"
+        sheet["B6"] = "Stock"
+        sheet["A7"] = "Apr-26"
+        sheet["B7"] = 12.5
+        sheet["A8"] = "May-26"
+        sheet["B8"] = "not numeric"
 
         sheet = XLSX.addsheet!(xf, "Table 2")
         sheet["A1"] = "Series ID"
@@ -85,13 +87,16 @@ end
 
     tidy = tidy_abs(workbook)
     @test tidy isa DataFrame
-    @test names(tidy) == ["series_id", "series", "unit", "frequency", "seasonal_adjustment", "table", "cat_no", "date", "value"]
+    @test names(tidy) == ["table", "date", "series_id", "value", "unit", "series_type", "data_type", "frequency", "series"]
     @test tidy.date[1] == Date(2026, 4, 1)
+    @test tidy.date[2] == Date(2026, 5, 1)
+    @test tidy.value[1] == 12.5
+    @test ismissing(tidy.value[2])
     @test tidy.frequency[1] == "monthly"
     @test tidy.series[1] == "Employed total"
     @test tidy.unit[1] == "Persons"
-    @test tidy.seasonal_adjustment[1] == "Seasonally adjusted"
-    @test ismissing(tidy.cat_no[1])
+    @test tidy.series_type[1] == "Seasonally adjusted"
+    @test tidy.data_type[1] == "Stock"
 
     periods = tidy_abs(period_workbook())
     @test periods[periods.series_id .== "M1234567", :date] == [Date(2024, 1, 1), Date(2024, 2, 1)]
@@ -111,6 +116,6 @@ end
     @test first(read_abs("6202.0"; tables=1).table) == "Data1"
 
     series = read_abs_series("A84423043A"; cat_no="6202.0")
-    @test first(series.cat_no) == "6202.0"
-    @test first(series.seasonal_adjustment) == "Seasonally adjusted"
+    @test first(series.series_type) == "Seasonally adjusted"
+    @test first(series.data_type) == "Stock"
 end
