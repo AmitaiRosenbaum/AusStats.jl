@@ -666,7 +666,9 @@ function _download_link_contexts(doc)
 end
 
 function _parse_html(html::AbstractString)
-    return EzXML.parsehtml(html)
+    return Logging.with_logger(Logging.NullLogger()) do
+        EzXML.parsehtml(html; nowarning=true)
+    end
 end
 
 function _html_findall(node, xpath::AbstractString)

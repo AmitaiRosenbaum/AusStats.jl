@@ -699,14 +699,127 @@ end
     @test all(name -> name in names(info), ["kind", "file", "path", "size", "modified"])
 end
 
-if get(ENV, "AUSTRALIANSTATISTICS_ONLINE_TESTS", "false") == "true"
-    @testset "AustralianStatistics online integration" begin
+@testset "ABS HTML fixtures" begin
+    discovered = discovery_fixture_rows()
+    @test nrow(discovered) == 3
+    @test "1" in discovered.table_no
+    @test "2" in discovered.table_no
+    @test all(startswith.(discovered.url, "https://www.abs.gov.au/"))
+    @test all(discovered.file_type .== "xlsx")
+    @test "Download xlsx [750.18 KB]" ∉ discovered.file_title
+    @test only(discovered[discovered.is_cube, :file_title]) == "Labour Force, Australia, detailed, quarterly, data cube"
+
+    archive_releases = archive_fixture_releases()
+    @test archive_releases.release_date == [Date(2019, 9, 1), Date(2019, 12, 1), Date(2020, 3, 1)]
+    @test all(startswith.(archive_releases.release_url, "https://www.abs.gov.au/"))
+
+    historical_files = historical_release_fixture_rows()
+    @test nrow(historical_files) == 2
+    @test historical_files.release_date == fill("sep-2019", 2)
+    @test Set(historical_files.table_no) == Set(["1", "2b"])
+end
+
+@testset "Workbook parsing fixtures" begin
+    workbook = sample_workbook()
+    tidy = tidy_abs(workbook; cat_no="6202.0", release_date="apr-2026")
+    @test nrow(tidy) == 6
+    @test Set(tidy.series_id) == Set(["A84423043A", "B84423043B", "C1234567", "D1234567"])
+    @test nrow(tidy[tidy.table .== "Data1", :]) == 4
+    @test nrow(tidy[tidy.table .== "Table 2", :]) == 1
+    @test nrow(tidy[tidy.table .== "Data10", :]) == 1
+    @test "Notes" ∉ tidy.table
+
+    periods = tidy_abs(period_workbook())
+    @test periods[periods.series_id .== "M1234567", :date] == [Date(2024, 1, 1), Date(2024, 2, 1)]
+    @test periods[periods.series_id .== "Q1234567", :date] == [Date(2024, 1, 1), Date(2024, 4, 1), Date(2024, 7, 1)]
+    @test periods[periods.series_id .== "Y1234567", :date] == [Date(2024, 1, 1)]
+
+    metadata = read_metadata(metadata_layout_workbook())
+    @test Set(metadata.cat_no) == Set(["6401.0", "5206.0", "6302.0", "6160.0.55.001"])
+    @test Set(metadata.frequency) == Set(["quarterly", "semiannual", "weekly"])
+end
+
+@testset "Cube parsing fixtures" begin
+    generic = read_cube(cube_workbook(); family=:generic)
+    @test nrow(generic) == 2
+    @test generic.sheet == ["Cube 1", "Cube 1"]
+    @test "source_file" in names(generic)
+
+    matrix = read_cube(labelled_cube_workbook())
+    @test nrow(matrix) == 4
+    @test names(matrix) == [
+        "source_file", "cat_no", "release_date", "cube", "cube_title", "sheet",
+        "date", "frequency", "value", "State", "Sex", "Age",
+    ]
+    @test matrix.date == [Date(2024, 3, 1), Date(2024, 6, 1), Date(2024, 3, 1), Date(2024, 6, 1)]
+    @test ismissing(matrix.value[3])
+    @test matrix.Sex == ["Male", "Male", "Female", "Female"]
+end
+
+@testset "API response fixtures" begin
+    api_datastructure_fixture()
+    structure = datastructure("MOCK")
+    @test nrow(structure) == 6
+    @test names(structure) == ["dimension_id", "dimension_name", "position", "code", "label", "code_position"]
+    @test api_key("MOCK"; filters=(sex_abs="3", asgs_2016="0")) == "3.0."
+    @test api_key("MOCK"; filters=(sex_abs="Persons", measure="EMP")) == "3..EMP"
+    @test_throws ArgumentError api_key("MOCK"; filters=(sex_abs="9",))
+
+    rows = AustralianStatistics._sdmx_data_to_dataframe(api_data_fixture())
+    @test nrow(rows) == 2
+    @test rows.period == ["2024-Q1", "2024-Q2"]
+    @test rows.date == [Date(2024, 1, 1), Date(2024, 4, 1)]
+    @test rows.value == [10.0, 11.5]
+end
+
+@testset "Core workflow regressions" begin
+    index = convenience_fixture_index()
+    @test nrow(index[index.cat_no .== "6202.0", :]) >= 2
+
+    selected = AustralianStatistics._select_file("6202.0"; cube=false)
+    sample_workbook(joinpath(default_cache_dir(), "workbooks", selected.filename))
+
+    table_one = read_abs("6202.0"; tables=1)
+    @test nrow(table_one) == 4
+    @test Set(table_one.series_id) == Set(["A84423043A", "B84423043B"])
+
+    known = read_series("A84423043A"; cat_no="6202.0")
+    @test nrow(known) == 2
+    @test unique(known.series_id) == ["A84423043A"]
+
+    @test nrow(search_cubes("labelled"; cat_no="6202.0")) == 1
+    labelled = read_cube("6202.0"; cube="labelled")
+    @test nrow(labelled) == 4
+    @test unique(labelled.cube) == ["6202.0_lfs_labelled_matrix_cube.xlsx"]
+end
+
+function _online_tests_enabled()
+    return lowercase(get(ENV, "AUSTRALIANSTATISTICS_ONLINE_TESTS", "false")) in ("1", "true", "yes")
+end
+
+if _online_tests_enabled()
+    @testset "Online latest release" begin
         refreshed = refresh_abs!()
         @test nrow(refreshed) >= 1
         downloaded = download_abs("6202.0"; force=true)
         @test isfile(downloaded)
-        @test read_abs("6202.0"; tables=1) isa DataFrame
-        wpi = download_abs("6345.0"; release=Date(2019, 9, 1), force=true)
+        latest = read_abs("6202.0"; tables=1, refresh=true)
+        @test latest isa DataFrame
+        @test nrow(latest) > 0
+        @test all(name -> name in names(latest), ["date", "series_id", "value", "table"])
+        @test latest_date(latest) !== missing
+    end
+
+    @testset "Online historical release" begin
+        files_2019 = AustralianStatistics._files_for_release("6345.0", Date(2019, 9, 1); refresh=true, strict=true)
+        @test nrow(files_2019) >= 1
+        @test all(files_2019.release_date .== "sep-2019")
+        timeseries_2019 = files_2019[files_2019.is_timeseries, :]
+        @test nrow(timeseries_2019) >= 1
+        selected = first(sort(timeseries_2019, [:table_no, :filename]))
+        wpi = download_abs("6345.0"; file=selected.filename, release=Date(2019, 9, 1), force=true)
         @test isfile(wpi)
     end
+else
+    @info "Skipping online tests; set AUSTRALIANSTATISTICS_ONLINE_TESTS=true to enable latest and historical release checks."
 end

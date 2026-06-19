@@ -6,6 +6,7 @@ using Downloads
 using EzXML
 using HTTP
 using JSON3
+using Logging
 using Preferences
 using Serialization
 using SHA
