@@ -79,6 +79,19 @@ end
     @test direct_dimensions.dimension_id == ["SERIES_DIM", "OBS_DIM"]
     @test direct_dimensions.code == ["S1", "O1"]
 
+    collected_dimensions = AusStats._datastructure_dimensions(JSON3.read("""
+    {
+      "outer": {
+        "dimensions": [
+          {"id": "COLLECTED_A", "name": "Collected A"},
+          {"id": "COLLECTED_B", "name": "Collected B"}
+        ]
+      }
+    }
+    """))
+    @test length(collected_dimensions) == 2
+    @test AusStats._json_string(first(collected_dimensions), "id") == "COLLECTED_A"
+
     nested_codelists = AusStats._datastructure_codelists(JSON3.read("""
     {
       "outer": {
@@ -91,6 +104,11 @@ end
     """))
     @test haskey(nested_codelists, "CL_DIRECT")
     @test !haskey(nested_codelists, "ignored")
+
+    vector_codelists = AusStats._datastructure_codelists(JSON3.read("""
+    {"codelists": [{"id": "CL_VECTOR", "items": [{"id": "V"}]}]}
+    """))
+    @test haskey(vector_codelists, "CL_VECTOR")
 
     no_codes = AusStats._datastructure_dataframe(JSON3.read("""
     {"structure": {"dimensions": {"series": [{"id": "FREE_TEXT", "name": "Free text"}]}}}
@@ -123,6 +141,9 @@ end
     AusStats._collect_named_objects!(collected, Dict("target" => "scalar"), ("target",))
     @test collected == ["scalar"]
     @test AusStats._json_get(42, "missing", "fallback") == "fallback"
+    json_object = JSON3.read("""{"present": 1}""")
+    @test AusStats._json_get(json_object, "present", 0) == 1
+    @test AusStats._json_get(json_object, "missing", 0) == 0
     @test AusStats._json_path(Dict("x" => 1), 1) === nothing
     @test AusStats._json_path(Dict("x" => []), "x", 1) === nothing
 end

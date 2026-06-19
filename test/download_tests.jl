@@ -149,3 +149,114 @@ end
     @test AusStats._context_score("Table 1. Short") > AusStats._context_score("Download")
     @test AusStats._title_score("Table 1. Good") > AusStats._title_score("Download")
 end
+
+@testset "Local discovery flows" begin
+    base_ref = Ref("")
+    server = HTTP.serve!(listenany=true) do request
+        target = string(request.target)
+        if target == "/direct"
+            return HTTP.Response(200, body="""
+            <html>
+              <head><meta name="description" content="Direct local description"></head>
+              <body>
+                <h1>Direct Local Catalogue</h1>
+                <p>Table 1. Direct download <a href="/direct/aug-2026/direct.xlsx">Download xlsx</a></p>
+              </body>
+            </html>
+            """)
+        elseif target == "/landing"
+            return HTTP.Response(200, body="""
+            <html><body>
+              <h1>Fallback Local Catalogue</h1>
+              <a href="$(base_ref[])/landing/aug-2026">Fallback Local Catalogue August 2026</a>
+            </body></html>
+            """)
+        elseif target == "/landing/aug-2026"
+            return HTTP.Response(200, body="""
+            <html><body>
+              <p>Table 2. Release page download <a href="/landing/aug-2026/release.xlsx">xlsx</a></p>
+            </body></html>
+            """)
+        elseif target == "/release-file-page"
+            return HTTP.Response(200, body="""
+            <html><body>
+              <p>Table 4. Release index download <a href="/release-file-page/sep-2026/release.xlsx">Download xlsx</a></p>
+            </body></html>
+            """)
+        elseif target == "/broken"
+            return HTTP.Response(500, "broken")
+        end
+        return HTTP.Response(404, "missing")
+    end
+
+    try
+        base = "http://127.0.0.1:$(HTTP.port(server))"
+        base_ref[] = base
+        direct_seed = (
+            cat_no = "9999.0",
+            title = "Direct Local Catalogue",
+            description = "Seed description",
+            page_url = base * "/direct",
+            file_title = "Seed file",
+            url = base * "/direct/aug-2026/seed.xlsx",
+            filename = "seed.xlsx",
+            table_no = "1",
+            is_timeseries = true,
+            is_cube = false,
+        )
+        direct_rows = AusStats._discover_seed_files(direct_seed)
+        @test length(direct_rows) == 1
+        @test only(direct_rows).title == "Direct Local Catalogue"
+        @test only(direct_rows).description == "Direct local description"
+        @test only(direct_rows).release_date == "aug-2026"
+
+        fallback_seed = (
+            cat_no = "9998.0",
+            title = "Fallback Local Catalogue",
+            description = "Seed description",
+            page_url = base * "/landing",
+            file_title = "Seed file",
+            url = base * "/landing/aug-2026/seed.xlsx",
+            filename = "seed.xlsx",
+            table_no = "1",
+            is_timeseries = true,
+            is_cube = false,
+        )
+        fallback_rows = AusStats._discover_seed_files(fallback_seed)
+        @test length(fallback_rows) == 1
+        @test only(fallback_rows).table_no == "2"
+
+        broken_seed = (
+            cat_no = "9997.0",
+            title = "Broken Local Catalogue",
+            description = "Seed description",
+            page_url = base * "/broken",
+            file_title = "Seed file",
+            url = base * "/broken/oct-2026/seed.xlsx",
+            filename = "seed.xlsx",
+            table_no = "1",
+            is_timeseries = true,
+            is_cube = false,
+        )
+        @test only(AusStats._discover_seed_files(broken_seed)).filename == "seed.xlsx"
+
+        release_rows = AusStats._release_rows_dataframe([
+            AusStats._release_row(cat_no="6202.0", title="", release_date=Date(2026, 9, 1), release_url=base * "/release-file-page"),
+        ])
+        AusStats._write_release_index("6202.0", release_rows)
+        release_cache_path = AusStats._release_file_index_path("6202.0", Date(2026, 9, 1))
+        isfile(release_cache_path) && rm(release_cache_path)
+        release_files = AusStats._files_for_release("6202.0", Date(2026, 9, 1); refresh=false, strict=true)
+        @test nrow(release_files) == 1
+        @test release_files.table_no == ["4"]
+        @test isfile(release_cache_path)
+
+        no_html_rows = AusStats._release_rows_dataframe([
+            AusStats._release_row(cat_no="6202.0", title="No HTML", release_date=Date(2026, 10, 1), release_url=base * "/broken"),
+        ])
+        AusStats._write_release_index("6202.0", no_html_rows)
+        @test nrow(AusStats._files_for_release("6202.0", Date(2026, 10, 1); refresh=false, strict=false)) == 0
+    finally
+        close(server)
+    end
+end

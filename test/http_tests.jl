@@ -1,4 +1,5 @@
 @testset "HTTP wrappers" begin
+    workbook = sample_workbook()
     server = HTTP.serve!(listenany=true) do request
         target = string(request.target)
         if startswith(target, "/json")
@@ -19,6 +20,10 @@
             return HTTP.Response(413, "too large")
         elseif startswith(target, "/missing")
             return HTTP.Response(404, "missing")
+        elseif startswith(target, "/bad-json")
+            return HTTP.Response(200, ["Content-Type" => "application/json"], body="{")
+        elseif startswith(target, "/jul-2026/workbook.xlsx")
+            return HTTP.Response(200, ["Content-Type" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"], body=read(workbook))
         end
         return HTTP.Response(200, "hello")
     end
@@ -60,6 +65,15 @@
             sprint(showerror, error)
         end
         @test occursin("Narrow large ABS API queries", wrapped_message)
+
+        @test_throws Exception read_api_url(base * "/bad-json")
+
+        workbook_url = base * "/jul-2026/workbook.xlsx"
+        @test nrow(read_abs_url(workbook_url; tables=1, cache=false)) == 4
+        @test nrow(read_abs(workbook_url; tables=1, cache=false)) == 4
+        metadata = read_metadata(workbook_url; tables=1)
+        @test nrow(metadata) == 2
+        @test all(metadata.release_date .== "jul-2026")
     finally
         close(server)
     end
