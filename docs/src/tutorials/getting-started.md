@@ -1,93 +1,68 @@
 # Getting Started
 
-This tutorial shows the basic workflow: find a catalogue, download its workbook, read a table, and produce tidy data.
+This tutorial covers the shortest path from search to tidy ABS time-series data.
 
-## Load the Package
+## Load The Package
 
 ```julia
 using AustralianStatistics
 using DataFrames
 ```
 
-## Search for a Publication
+## Find A Publication
 
-Use [`search_abs`](@ref) to search the local catalogue map. Search is case-insensitive and matches catalogue number, title, and description.
+Use [`search_abs`](@ref) to search catalogue numbers, publication titles, descriptions, and known downloadable files.
 
 ```julia
 search_abs("labour")
 ```
 
-The result is a `DataFrame` with:
+Use [`catalogues`](@ref) to list known catalogues:
 
-- `cat_no`
-- `title`
-- `description`
-- `supported`
+```julia
+catalogues()
+```
 
-For example, searching for `"labour"` returns the supported Labour Force catalogue `6202.0`.
+## Read Tidy Time-Series Data
 
-## Download a Workbook
+[`read_abs`](@ref) accepts a catalogue number and returns tidy long-format observations by default.
 
-Use [`download_abs`](@ref) with a supported ABS catalogue number:
+```julia
+df = read_abs("6202.0"; tables=1)
+```
+
+The result has one row per series-date observation. Metadata rows from the workbook, such as `Series ID`, `Unit`, `Frequency`, and `Series Type`, become columns rather than data rows.
+
+## Download First, Read Later
+
+Downloads are cached.
 
 ```julia
 path = download_abs("6202.0")
+
+df = read_abs_local(path; tables=1)
 ```
 
-The workbook is saved in the package cache. If the file already exists, it is reused by default.
-
-To force a fresh download:
+Force a fresh download when needed:
 
 ```julia
 path = download_abs("6202.0"; force=true)
 ```
 
-## Read an ABS Table
+## Inspect Metadata
 
-Use [`read_abs`](@ref) with `tables` to read ABS time-series sheets into tidy long format.
-
-```julia
-df = read_abs("6202.0"; tables=["1"])
-```
-
-The result has one row per series-date observation. Metadata rows such as `Unit`, `Series Type`, `Data Type`, `Frequency`, and `Series ID` are extracted into columns, not returned as data rows.
-
-You can still read the first worksheet as a raw table by omitting `tables`:
+Use [`read_metadata`](@ref) when you want one row per series rather than one row per observation.
 
 ```julia
-df = read_abs(path)
+metadata = read_metadata("6202.0"; tables=1)
 ```
 
-## Produce Tidy Time-Series Data
+## Find One Series
 
-Use [`tidy_abs`](@ref) to convert an ABS workbook into long-form data.
+If you know the ABS series identifier, use [`read_series`](@ref):
 
 ```julia
-tidy = tidy_abs(path)
+series = read_series("A84423043A"; cat_no="6202.0")
 ```
 
-The tidy output includes metadata columns where they can be found:
-
-- `table`
-- `date`
-- `series_id`
-- `value`
-- `unit`
-- `series_type`
-- `data_type`
-- `frequency`
-- `series`
-
-## Find a Single Series
-
-Use [`read_abs_series`](@ref) when you know the ABS series identifier.
-
-```julia
-series = read_abs_series("A84423043A"; cat_no="6202.0")
-```
-
-If you omit `cat_no`, the package searches all currently supported catalogues:
-
-```julia
-series = read_abs_series("A84423043A")
-```
+Series matching is case-insensitive.

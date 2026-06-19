@@ -16,8 +16,12 @@ makedocs(;
         "Home" => "index.md",
         "Tutorials" => [
             "Getting Started" => "tutorials/getting-started.md",
+            "Discovery" => "tutorials/discovery.md",
             "Reading Tables" => "tutorials/reading-tables.md",
+            "Metadata" => "tutorials/metadata.md",
             "Working With Series" => "tutorials/series.md",
+            "Data Cubes" => "tutorials/cubes.md",
+            "ABS API" => "tutorials/api.md",
             "Cache Management" => "tutorials/cache.md",
         ],
         "API Reference" => "api.md",

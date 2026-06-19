@@ -1,25 +1,27 @@
 # Reading Tables
 
-ABS workbooks often contain many sheets. [`read_abs`](@ref) provides a forgiving `tables` filter so you can select the sheet or sheets you want without needing to know the exact sheet name.
+ABS time-series workbooks often contain many sheets. [`read_abs`](@ref) provides a forgiving `tables` filter so you can select sheets without knowing the exact workbook name.
 
-## Read the First Sheet
+## Tidy Reads
 
-When no `sheet` or `tables` argument is supplied, [`read_abs`](@ref) reads the first worksheet as a raw table.
+Tidy reads are the default:
 
 ```julia
-df = read_abs("6202.0")
+df = read_abs("6202.0"; tables=1)
 ```
 
-## Select Tables by Name or Number
+The output is long-format time-series data with source table and sheet metadata.
 
-The `tables` filter is forgiving:
+## Forgiving Table Matching
 
-- case-insensitive
+The `tables` keyword:
+
+- is case-insensitive
 - ignores spaces
 - accepts integers or strings
 - matches table numbers embedded in sheet names
 
-These calls are all valid:
+These are equivalent for a workbook with a `Data1` sheet:
 
 ```julia
 read_abs("6202.0"; tables=["1"])
@@ -28,35 +30,31 @@ read_abs("6202.0"; tables=["Data1"])
 read_abs("6202.0"; tables=1)
 ```
 
-If multiple sheets match, the result is combined into one `DataFrame` and a `table` column is added with the source sheet name.
+Read multiple tables by passing a vector:
 
 ```julia
-df = read_abs("6202.0"; tables=["1", "2"])
+df = read_abs("6202.0"; tables=[1, 2])
 ```
 
-The table output is tidy long-format time-series data with one row per series-date observation.
+## Catalogue Numbers, Local Files, And URLs
 
-## Read a Specific Sheet
-
-You can still select an exact worksheet with `sheet`:
+Use the same workflow for supported source types:
 
 ```julia
-df = read_abs("6202.0"; sheet="Data1")
+read_abs("6202.0"; tables=1)
+
+path = download_abs("6202.0")
+read_abs_local(path; tables=1)
+
+read_abs_url("https://www.abs.gov.au/path/to/workbook.xlsx"; tables=1)
 ```
 
-Use `tables` when you want forgiving matching. Use `sheet` when you know the exact worksheet name.
+## Raw Sheet Reads
 
-The `header_row` keyword applies to raw sheet reads. It is not used with `tables`, because table reads detect the first ABS period row and reshape the sheet into long format.
-
-## Reading URLs or Local Files
-
-[`read_abs`](@ref) accepts:
-
-- supported catalogue numbers, such as `"6202.0"`
-- local workbook paths
-- direct workbook URLs
+Set `tidy=false` to read the first matched sheet as a raw table.
 
 ```julia
-path = download_abs("6401.0")
-df = read_abs(path)
+raw = read_abs("6202.0"; tables=1, tidy=false)
 ```
+
+Raw reads are useful when you are inspecting an unfamiliar workbook layout.

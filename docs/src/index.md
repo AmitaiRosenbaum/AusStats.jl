@@ -1,70 +1,45 @@
 # AustralianStatistics.jl
 
-AustralianStatistics.jl is a small Julia package for downloading, discovering, and tidying official Australian Bureau of Statistics spreadsheet data.
+AustralianStatistics.jl is a Julia package for finding, downloading, reading, and tidying Australian Bureau of Statistics data.
 
-It focuses on pragmatic access to ABS Excel time-series workbooks. The package does not yet implement SDMX, live API discovery, or a provider abstraction. Instead, it provides a simple catalogue map for a small set of high-value ABS publications and tools for turning their spreadsheets into tidy `DataFrame`s.
+It is designed around ordinary Julia workflows: functions return `DataFrame`s, catalogue discovery is explicit, downloads are cached, and ABS time-series workbooks are reshaped into tidy long-format observations.
 
-## What It Does
-
-- Search the locally supported ABS catalogue map.
-- Download supported ABS Excel workbooks into a package cache.
-- Read workbook sheets into `DataFrame`s.
-- Convert ABS time-series spreadsheets into tidy long-form data.
-- Find a series by `series_id` across one or all supported catalogues.
-- Inspect and clear the local cache.
-
-## Supported Catalogues
-
-The current catalogue map is intentionally small:
-
-| Catalogue | Publication |
-| --- | --- |
-| `6202.0` | Labour Force, Australia |
-| `6401.0` | Consumer Price Index, Australia |
-| `5206.0` | Australian National Accounts |
-| `6345.0` | Wage Price Index, Australia |
-
-## Installation
-
-From a local checkout:
-
-```julia
-pkg> dev .
-```
-
-Then load the package:
-
-```julia
-using AustralianStatistics
-```
-
-## Quick Example
+## Core Workflows
 
 ```julia
 using AustralianStatistics
 
 search_abs("labour")
 
-path = download_abs("6202.0")
+files("6202.0")
 
-raw = read_abs("6202.0"; tables=["1"])
+df = read_abs("6202.0"; tables=1)
 
-tidy = tidy_abs(path)
+metadata = read_metadata("6202.0"; tables=1)
 
-series = read_abs_series("A84423043A"; cat_no="6202.0")
+series = read_series("A84423043A"; cat_no="6202.0")
 ```
 
-## Public API
+## What The Package Covers
 
-The exported API is deliberately small:
+- Catalogue and file discovery with cached indexes.
+- Downloading ABS time-series workbooks and data cubes.
+- Reading catalogue numbers, direct URLs, and local Excel files.
+- Tidy parsing of ABS time-series spreadsheets.
+- One-row-per-series metadata extraction.
+- Series lookup by ABS series identifier.
+- Data cube reading as practical sheet-shaped tables.
+- ABS API dataflow, datastructure, and observation reads.
+- Cache inspection and cleanup.
 
-- [`search_abs`](@ref)
-- [`download_abs`](@ref)
-- [`read_abs`](@ref)
-- [`tidy_abs`](@ref)
-- [`read_abs_series`](@ref)
-- [`default_cache_dir`](@ref)
-- [`cache_info`](@ref)
-- [`clear_cache!`](@ref)
+## Output Style
+
+Time-series workbook reads return tidy long-format data by default. Each row is one series-date observation with ABS metadata where available, including series id, unit, frequency, table information, collection month, and series start.
+
+Data cubes are read as table-shaped `DataFrame`s because ABS cubes vary widely in layout.
+
+## Tutorials
+
+Start with [Getting Started](@ref), then use the focused tutorials for discovery, table reading, metadata, series workflows, cubes, the ABS API, and cache management.
 
 See the [API Reference](@ref api-reference) for complete docstrings.

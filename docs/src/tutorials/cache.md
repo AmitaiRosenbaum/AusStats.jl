@@ -1,58 +1,44 @@
 # Cache Management
 
-Downloaded ABS workbooks are stored in a package cache managed by Scratch.jl.
+AustralianStatistics.jl caches indexes, workbooks, data cubes, and API metadata under the package cache directory.
 
 ## Cache Location
-
-Use [`default_cache_dir`](@ref) to see where files are cached:
 
 ```julia
 default_cache_dir()
 ```
 
-This is the default destination used by [`download_abs`](@ref).
+The default location is managed by Scratch.jl.
 
 ## Inspect Cached Files
-
-Use [`cache_info`](@ref):
 
 ```julia
 cache_info()
 ```
 
-The result is a `DataFrame` with:
+The result includes:
 
+- `kind`
 - `file`
 - `path`
 - `size`
 - `modified`
 
-## Reuse or Force Downloads
+## Clear Cached Files
 
-By default, downloads are reused:
-
-```julia
-path = download_abs("6202.0")
-```
-
-Force a fresh download:
-
-```julia
-path = download_abs("6202.0"; force=true)
-```
-
-You can also choose a different destination:
-
-```julia
-path = download_abs("6202.0"; dest=tempdir())
-```
-
-## Clear the Cache
-
-Use [`clear_cache!`](@ref) to remove cached package files:
+Clear everything:
 
 ```julia
 clear_cache!()
 ```
 
-The function returns the number of cached files removed.
+Clear one group:
+
+```julia
+clear_cache!(:indexes)
+clear_cache!(:workbooks)
+clear_cache!(:cubes)
+clear_cache!(:api)
+```
+
+The function returns the number of files removed.
