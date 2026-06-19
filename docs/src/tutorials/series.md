@@ -40,6 +40,25 @@ df = read_abs("6202.0"; tables=1)
 expanded = separate_series(df)
 ```
 
+Use custom column names when the parts have a known meaning:
+
+```julia
+expanded = separate_series(df; names=[:measure, :region, :sex])
+```
+
+Standalone aggregate labels can be removed from the split components:
+
+```julia
+expanded = separate_series(df; remove_totals=true)
+```
+
+To keep only rows with complete split components, combine custom names with
+`drop_missing=true`:
+
+```julia
+expanded = separate_series(df; names=[:measure, :region], drop_missing=true)
+```
+
 ## Latest Observation Date
 
 Use [`latest_date`](@ref) to check the latest available period in a result:

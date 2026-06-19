@@ -370,6 +370,28 @@ end
     separated = separate_series(metadata)
     @test "series_part_1" in names(separated)
     @test separated.series_part_1[1] == "Employed total"
+    split_sample = DataFrame(series=[
+        "All groups, Male, Total",
+        "Employed total, Female",
+        "Labour force",
+        missing,
+    ])
+    named_parts = separate_series(split_sample; names=[:measure, :sex, :aggregate])
+    @test names(named_parts)[end-2:end] == ["measure", "sex", "aggregate"]
+    @test named_parts.measure[1] == "All groups"
+    @test named_parts.aggregate[1] == "Total"
+
+    without_totals = separate_series(split_sample; remove_totals=true)
+    @test without_totals.series_part_1[1] == "Male"
+    @test ismissing(without_totals.series_part_2[1])
+    @test without_totals.series_part_1[2] == "Employed total"
+    @test without_totals.series_part_2[2] == "Female"
+
+    complete_parts = separate_series(split_sample; names=[:measure, :sex], remove_totals=true, drop_missing=true)
+    @test nrow(complete_parts) == 1
+    @test complete_parts.measure == ["Employed total"]
+    @test complete_parts.sex == ["Female"]
+    @test_throws ArgumentError separate_series(split_sample; names=[:only_one])
     @test latest_date(tidy) == Date(2026, 5, 1)
 
     sample_workbook(joinpath(default_cache_dir(), "workbooks", selected.filename))

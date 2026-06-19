@@ -98,24 +98,31 @@ function read_series(series_id; cat_no=nothing, tables=nothing, release=:latest,
 end
 
 """
-    separate_series(df; column=:series)
+    separate_series(df; column=:series, names=nothing, remove_totals=false, drop_missing=false)
 
 Split a descriptive ABS series column into simple component columns. Components
 are split on semicolons, pipes, or repeated comma-separated phrases.
+
+By default, generated columns are named after the source column, for example
+`series_part_1`. Pass `names` as a vector of symbols or strings to use custom
+column names. Set `remove_totals=true` to drop standalone aggregate labels such
+as `Total` or `All groups` from the split components. Set `drop_missing=true`
+to remove rows where any split component is missing.
 """
-function separate_series(df::DataFrame; column=:series)
+function separate_series(df::DataFrame; column=:series, names=nothing, remove_totals::Bool=false, drop_missing::Bool=false)
     name = Symbol(column)
     hasproperty(df, name) || throw(ArgumentError("column `$column` was not found"))
 
-    parts = [ismissing(value) ? String[] : _series_parts(string(value)) for value in df[!, name]]
+    parts = [ismissing(value) ? String[] : _series_parts(string(value); remove_totals) for value in df[!, name]]
     max_parts = maximum(length, parts; init=0)
+    output_names = _series_part_names(name, max_parts, names)
     out = copy(df)
 
-    for index in 1:max_parts
-        out[!, Symbol("$(name)_part_$index")] = [index <= length(row_parts) ? row_parts[index] : missing for row_parts in parts]
+    for (index, output_name) in enumerate(output_names)
+        out[!, output_name] = [index <= length(row_parts) ? row_parts[index] : missing for row_parts in parts]
     end
 
-    return out
+    return drop_missing && !isempty(output_names) ? dropmissing(out, output_names) : out
 end
 
 """
@@ -328,10 +335,41 @@ function _series_matches(df::DataFrame, needles::Set{String})
     return df[keep, :]
 end
 
-function _series_parts(value::AbstractString)
+function _series_parts(value::AbstractString; remove_totals::Bool=false)
     delimiter = occursin(";", value) ? r"\s*;\s*" : occursin("|", value) ? r"\s*\|\s*" : r"\s*,\s*"
     parts = [strip(part) for part in split(value, delimiter) if !isempty(strip(part))]
-    return parts
+    return remove_totals ? [part for part in parts if !_is_aggregate_series_part(part)] : parts
+end
+
+function _series_part_names(column::Symbol, count::Int, names)
+    if names === nothing
+        return [Symbol("$(column)_part_$index") for index in 1:count]
+    end
+
+    names isa AbstractString && throw(ArgumentError("names must be a vector or tuple of symbols or strings"))
+    provided = collect(names)
+    length(provided) == count || throw(ArgumentError("names must contain $count entries; got $(length(provided))"))
+    return Symbol.(provided)
+end
+
+function _is_aggregate_series_part(value::AbstractString)
+    key = replace(lowercase(strip(value)), r"\s+" => " ")
+    return key in _aggregate_series_tokens()
+end
+
+function _aggregate_series_tokens()
+    return Set([
+        "total",
+        "totals",
+        "all",
+        "all groups",
+        "all sectors",
+        "all states",
+        "all territories",
+        "all industries",
+        "all persons",
+        "all employees",
+    ])
 end
 
 function _is_url(value::AbstractString)
