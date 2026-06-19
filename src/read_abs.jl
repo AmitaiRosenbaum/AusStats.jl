@@ -68,10 +68,8 @@ end
 Return one row per ABS series with the metadata available in `source`.
 """
 function read_metadata(source::AbstractString; tables=nothing)
-    df = read_abs(source; tables, tidy=true)
-    isempty(df) && return select(df, Not([:date, :value]))
-    cols = [name for name in names(df) if name ∉ ("date", "value")]
-    return unique(select(df, cols))
+    path, cat_no, release_date = _metadata_source(source)
+    return _read_metadata_workbook(path; tables, cat_no, release_date)
 end
 
 """
@@ -139,6 +137,50 @@ function _read_workbook(path::AbstractString; tables=nothing, tidy::Bool=true, c
     end
 
     return _read_raw_workbook(path; tables)
+end
+
+function _metadata_source(source::AbstractString)
+    if _is_url(source)
+        path = _download_file(source; dest=_cache_subdir(:workbooks))
+        return (path, missing, something(_release_from_url(source), missing))
+    elseif isfile(source)
+        return (source, missing, missing)
+    elseif ispath(source)
+        throw(ArgumentError("metadata source must be a workbook file, not a directory: `$source`"))
+    end
+
+    row = _select_file(source; release=:latest, cube=false)
+    path = download_abs(source; file=row.filename)
+    return (path, row.cat_no, row.release_date)
+end
+
+function _read_metadata_workbook(path::AbstractString; tables=nothing, cat_no=missing, release_date=missing)
+    _validate_local_workbook(path; context="metadata source")
+    out = _empty_abs_metadata()
+    source_workbook = abspath(path)
+
+    XLSX.openxlsx(path) do xf
+        sheetnames = XLSX.sheetnames(xf)
+        selected = tables === nothing ? sheetnames : _matching_tables(sheetnames, tables)
+        for sheetname in selected
+            sheet_index = findfirst(==(sheetname), sheetnames)
+            metadata = try
+                _metadata_sheet(
+                    xf[sheetname],
+                    sheetname;
+                    cat_no,
+                    release_date,
+                    sheet_index=something(sheet_index, 1),
+                    source_workbook,
+                )
+            catch error
+                throw(ArgumentError("failed to extract metadata from sheet `$sheetname` in `$path`: $(sprint(showerror, error))"))
+            end
+            isempty(metadata) || append!(out, metadata)
+        end
+    end
+
+    return unique(out)
 end
 
 function _read_local_workbooks(paths; tables=nothing, tidy::Bool=true)

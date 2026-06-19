@@ -117,12 +117,98 @@ function _empty_tidy_abs()
     )
 end
 
+function _empty_abs_metadata()
+    return DataFrame(
+        cat_no = Union{Missing,String}[],
+        release_date = Union{Missing,String}[],
+        table = String[],
+        table_no = Union{Missing,String}[],
+        table_title = Union{Missing,String}[],
+        sheet = String[],
+        sheet_no = Int[],
+        series_id = String[],
+        unit = Union{Missing,String}[],
+        series_type = Union{Missing,String}[],
+        data_type = Union{Missing,String}[],
+        frequency = Union{Missing,String}[],
+        collection_month = Union{Missing,String}[],
+        series_start = Union{Missing,String}[],
+        series = Union{Missing,String}[],
+        source_workbook = String[],
+    )
+end
+
+function _metadata_sheet(sheet, sheetname::AbstractString; cat_no=missing, release_date=missing, sheet_index::Int=1, source_workbook::AbstractString="")
+    rows = _sheet_rows(sheet)
+    isempty(rows) && return _empty_abs_metadata()
+    all(_row_is_empty, rows) && return _empty_abs_metadata()
+
+    context = _sheet_context(rows, sheetname, sheet_index, cat_no, release_date)
+    if isempty(_date_rows_in_column(rows, 1))
+        metadata_only = _metadata_only_time_down(rows, context, source_workbook)
+        isempty(metadata_only) || return metadata_only
+    end
+
+    tidy = _tidy_sheet(sheet, sheetname; cat_no=context.cat_no, release_date=context.release_date, sheet_index)
+    if !isempty(tidy)
+        metadata = unique(select(tidy, Not([:date, :value])))
+        metadata[!, :source_workbook] = fill(source_workbook, nrow(metadata))
+        return metadata
+    end
+
+    return _metadata_only_time_down(rows, context, source_workbook)
+end
+
+function _metadata_only_time_down(rows, context, source_workbook::AbstractString)
+    date_col = 1
+    first_data_row = length(rows) + 1
+    labels = _metadata_labels(rows, first_data_row, date_col)
+    any(label -> haskey(labels, label), _series_id_labels()) || return _empty_abs_metadata()
+
+    max_cols = maximum(length, rows; init=0)
+    out = _empty_abs_metadata()
+    for col in 2:max_cols
+        series_id = _series_id_for_column(rows, col, first_data_row, labels)
+        _looks_like_abs_series_id(series_id) || continue
+
+        series = _series_name_for_column(rows, col, first_data_row, labels)
+        unit = _metadata_for_column(rows, col, labels, _unit_labels())
+        series_type = _metadata_for_column(rows, col, labels, _series_type_labels())
+        data_type = _metadata_for_column(rows, col, labels, _data_type_labels())
+        frequency = _normalise_frequency(_metadata_for_column(rows, col, labels, _frequency_labels()))
+        collection_month = _metadata_for_column(rows, col, labels, _collection_month_labels())
+        series_start = _metadata_for_column(rows, col, labels, _series_start_labels())
+        ismissing(series) && (series = _series_column_name(col))
+
+        push!(out, (
+            context.cat_no,
+            context.release_date,
+            context.table,
+            context.table_no,
+            context.table_title,
+            context.sheet,
+            context.sheet_no,
+            series_id,
+            unit,
+            series_type,
+            data_type,
+            frequency,
+            collection_month,
+            series_start,
+            series,
+            source_workbook,
+        ))
+    end
+
+    return out
+end
+
 function _tidy_sheet(sheet, sheetname::AbstractString; metadata::Bool=true, cat_no=missing, release_date=missing, sheet_index::Int=1)
     rows = _sheet_rows(sheet)
     isempty(rows) && return _empty_tidy_abs()
     all(_row_is_empty, rows) && return _empty_tidy_abs()
 
-    context = _sheet_context(sheetname, sheet_index, cat_no, release_date)
+    context = _sheet_context(rows, sheetname, sheet_index, cat_no, release_date)
 
     tidy = _tidy_sheet_time_down(rows, sheetname; metadata, context)
     isempty(tidy) || return tidy
@@ -528,6 +614,10 @@ function _normalise_frequency(value)
     startswith(text, "quarter") && return "quarterly"
     startswith(text, "annual") && return "annual"
     startswith(text, "year") && return "annual"
+    startswith(text, "week") && return "weekly"
+    startswith(text, "fortnight") && return "fortnightly"
+    (startswith(text, "biannual") || startswith(text, "semiannual") || startswith(text, "half-year")) && return "semiannual"
+    startswith(text, "day") && return "daily"
 
     return "unknown"
 end
@@ -568,6 +658,120 @@ function _sheet_context(sheetname::AbstractString, sheet_index::Int, cat_no, rel
         sheet = string(sheetname),
         sheet_no = sheet_index,
     )
+end
+
+function _sheet_context(rows, sheetname::AbstractString, sheet_index::Int, cat_no, release_date)
+    table_title = _infer_table_title(rows, sheetname)
+    table_no = something(_table_no(table_title), _table_no(sheetname), missing)
+    inferred_cat_no = _infer_catalogue_number(rows)
+    inferred_release = _infer_release_value(rows)
+    return (
+        cat_no = ismissing(_missing_or_string(cat_no)) ? inferred_cat_no : _missing_or_string(cat_no),
+        release_date = ismissing(_missing_or_string(release_date)) ? inferred_release : _missing_or_string(release_date),
+        table = string(sheetname),
+        table_no = table_no,
+        table_title = table_title,
+        sheet = string(sheetname),
+        sheet_no = sheet_index,
+    )
+end
+
+function _infer_table_title(rows, sheetname::AbstractString)
+    first_date_row = findfirst(row -> !isempty(row) && _parse_abs_date(first(row)) !== nothing, rows)
+    metadata_end = something(first_date_row, length(rows) + 1) - 1
+    limit = min(length(rows), metadata_end, 30)
+    limit < 1 && return string(sheetname)
+
+    candidates = String[]
+    for row_index in 1:limit
+        for value in rows[row_index]
+            text = _clean_text(value)
+            _looks_like_table_title(text) && push!(candidates, text)
+        end
+    end
+
+    isempty(candidates) && return string(sheetname)
+    scores = [_table_title_score(candidate) for candidate in candidates]
+    return candidates[argmax(scores)]
+end
+
+function _looks_like_table_title(text::AbstractString)
+    isempty(text) && return false
+    key = _metadata_key(text)
+    key in _all_metadata_labels() && return false
+    occursin(r"(?i)^tables?\s*[0-9]+[a-z]?\b", text) && return true
+    return occursin(r"(?i)\btable\s*[0-9]+[a-z]?\b", text) && length(text) > 12
+end
+
+function _table_title_score(text::AbstractString)
+    score = min(length(text), 300)
+    occursin(r"(?i)^tables?\s*[0-9]+[a-z]?\b", text) && (score += 1000)
+    return score
+end
+
+function _infer_catalogue_number(rows)
+    for row in first(rows, min(length(rows), 30))
+        isempty(row) && continue
+        key = _metadata_key(first(row))
+        if key in ("cataloguenumber", "catalogueno", "catno", "catnumber")
+            value = _first_matching_text(row[2:end], r"\b[0-9]{4}(?:\.[0-9]+)*\b")
+            value === nothing || return value
+        end
+
+        for value in row
+            text = _clean_text(value)
+            m = match(r"(?i)catalogue\s*(?:number|no\.?)?\s*:?\s*([0-9]{4}(?:\.[0-9]+)*)", text)
+            m === nothing || return m.captures[1]
+        end
+    end
+    return missing
+end
+
+function _infer_release_value(rows)
+    for row in first(rows, min(length(rows), 30))
+        isempty(row) && continue
+        key = _metadata_key(first(row))
+        if key in ("releasedate", "released", "publicationdate", "referenceperiod")
+            for value in row[2:end]
+                text = _clean_text(value)
+                isempty(text) || return _normalise_release_text(text)
+            end
+        end
+
+        for value in row
+            text = _clean_text(value)
+            m = match(r"(?i)release(?:d| date)?\s*:?\s*(.+)$", text)
+            m === nothing || return _normalise_release_text(m.captures[1])
+        end
+    end
+    return missing
+end
+
+function _normalise_release_text(text::AbstractString)
+    release_date = _release_date_from_text(text)
+    return release_date === nothing ? strip(text) : _release_key(release_date)
+end
+
+function _first_matching_text(values, pattern)
+    for value in values
+        text = _clean_text(value)
+        m = match(pattern, text)
+        m === nothing || return m.match
+    end
+    return nothing
+end
+
+function _all_metadata_labels()
+    return Set(vcat(
+        collect(_series_id_labels()),
+        collect(_series_labels()),
+        collect(_unit_labels()),
+        collect(_frequency_labels()),
+        collect(_series_type_labels()),
+        collect(_data_type_labels()),
+        collect(_collection_month_labels()),
+        collect(_series_start_labels()),
+    ))
 end
 
 function _missing_or_string(value)

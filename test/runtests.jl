@@ -106,6 +106,79 @@ function period_workbook()
     return path
 end
 
+function metadata_layout_workbook(path=tempname() * ".xlsx")
+    XLSX.openxlsx(path, mode="w") do xf
+        sheet = xf[1]
+        XLSX.rename!(sheet, "CPI Metadata")
+        sheet["A1"] = "Consumer Price Index, Australia"
+        sheet["A2"] = "Catalogue Number"
+        sheet["B2"] = "6401.0"
+        sheet["A3"] = "Release Date"
+        sheet["B3"] = "April 2024"
+        sheet["A4"] = "Table 1. CPI: All groups, index numbers"
+        sheet["A5"] = "Series ID"
+        sheet["B5"] = "A2325846C"
+        sheet["A6"] = "Data item"
+        sheet["B6"] = "All groups CPI"
+        sheet["A7"] = "Unit"
+        sheet["B7"] = "Index Numbers"
+        sheet["A8"] = "Frequency"
+        sheet["B8"] = "Quarterly"
+
+        sheet = XLSX.addsheet!(xf, "National Accounts")
+        sheet["A1"] = "Catalogue Number"
+        sheet["B1"] = "5206.0"
+        sheet["A2"] = "Release Date"
+        sheet["B2"] = "June 2024"
+        sheet["A3"] = "Table 1. Key National Accounts Aggregates"
+        sheet["A4"] = "Series ID"
+        sheet["B4"] = "Series"
+        sheet["C4"] = "Unit"
+        sheet["D4"] = "Frequency"
+        sheet["E4"] = "Mar-2024"
+        sheet["F4"] = "Jun-2024"
+        sheet["A5"] = "A2304402X"
+        sheet["B5"] = "Gross domestic product"
+        sheet["C5"] = "\$ Millions"
+        sheet["D5"] = "Quarterly"
+        sheet["E5"] = 100.0
+        sheet["F5"] = 101.0
+
+        sheet = XLSX.addsheet!(xf, "Archived AWE")
+        sheet["A1"] = "Australian Bureau of Statistics"
+        sheet["A2"] = "Catalogue No: 6302.0"
+        sheet["A3"] = "Released: November 2018"
+        sheet["A4"] = "Table 3. Average Weekly Earnings, Australia"
+        sheet["A5"] = "Series Number"
+        sheet["B5"] = "A2733331A"
+        sheet["A6"] = "Description"
+        sheet["B6"] = "Average weekly ordinary time earnings"
+        sheet["A7"] = "Units"
+        sheet["B7"] = "Dollars"
+        sheet["A8"] = "Frequency"
+        sheet["B8"] = "Biannual"
+        sheet["A9"] = "May-2018"
+        sheet["B9"] = 1600.0
+
+        sheet = XLSX.addsheet!(xf, "Payrolls Metadata")
+        sheet["A1"] = "Weekly Payroll Jobs and Wages in Australia"
+        sheet["A2"] = "Catalogue Number"
+        sheet["B2"] = "6160.0.55.001"
+        sheet["A3"] = "Table 4. Payroll jobs index"
+        sheet["A4"] = "Series ID"
+        sheet["B4"] = "A9999999P"
+        sheet["A5"] = "Series"
+        sheet["B5"] = "Payroll jobs index"
+        sheet["A6"] = "Unit of measure"
+        sheet["B6"] = "Index"
+        sheet["A7"] = "Frequency"
+        sheet["B7"] = "Weekly"
+
+        XLSX.addsheet!(xf, "Explanatory Notes")
+    end
+    return path
+end
+
 function discovery_fixture_rows()
     html = read(joinpath(@__DIR__, "fixtures", "abs_publication_downloads.html"), String)
     doc = Gumbo.parsehtml(html)
@@ -261,6 +334,38 @@ end
     @test nrow(metadata) == 2
     @test "date" ∉ names(metadata)
     @test "value" ∉ names(metadata)
+    @test unique(metadata.source_workbook) == [abspath(workbook)]
+
+    metadata_path = metadata_layout_workbook()
+    layouts = read_metadata(metadata_path)
+    @test nrow(layouts) == 4
+    @test unique(layouts.source_workbook) == [abspath(metadata_path)]
+    @test "Explanatory Notes" ∉ layouts.sheet
+
+    cpi_metadata = only(eachrow(layouts[layouts.sheet .== "CPI Metadata", :]))
+    @test cpi_metadata.cat_no == "6401.0"
+    @test cpi_metadata.release_date == "apr-2024"
+    @test cpi_metadata.table_no == "1"
+    @test cpi_metadata.table_title == "Table 1. CPI: All groups, index numbers"
+    @test cpi_metadata.unit == "Index Numbers"
+    @test cpi_metadata.frequency == "quarterly"
+
+    national_accounts = only(eachrow(layouts[layouts.sheet .== "National Accounts", :]))
+    @test national_accounts.cat_no == "5206.0"
+    @test national_accounts.release_date == "jun-2024"
+    @test national_accounts.series == "Gross domestic product"
+    @test national_accounts.unit == "\$ Millions"
+
+    archived_awe = only(eachrow(layouts[layouts.sheet .== "Archived AWE", :]))
+    @test archived_awe.cat_no == "6302.0"
+    @test archived_awe.release_date == "nov-2018"
+    @test archived_awe.table_title == "Table 3. Average Weekly Earnings, Australia"
+    @test archived_awe.frequency == "semiannual"
+
+    payrolls = only(eachrow(layouts[layouts.sheet .== "Payrolls Metadata", :]))
+    @test payrolls.cat_no == "6160.0.55.001"
+    @test payrolls.table_no == "4"
+    @test payrolls.frequency == "weekly"
 
     separated = separate_series(metadata)
     @test "series_part_1" in names(separated)

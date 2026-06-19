@@ -27,6 +27,7 @@ Common columns include:
 - `collection_month`
 - `series_start`
 - `series`
+- `source_workbook` (metadata-only reads)
 
 ## Read Metadata Only
 
@@ -37,6 +38,11 @@ metadata = read_metadata("6202.0"; tables=1)
 ```
 
 This is useful for finding series ids, units, and adjustment types before downloading or analysing a full table.
+
+`read_metadata` also handles metadata-only sheets that contain series headers but
+no observation rows. It extracts catalogue and release information, table titles,
+sheet names, table numbers, units, frequencies, and the source workbook path when
+those values are available. Empty notes sheets are ignored.
 
 ## Periods And Frequency
 
