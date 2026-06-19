@@ -650,11 +650,13 @@ function _download_link_contexts(doc)
         for node in _html_context_nodes(doc, selector)
             text = _clean_discovery_text(_html_text(node))
             isempty(text) && continue
-            for link in _html_links(node)
+            download_links = [link for link in _html_links(node) if occursin(r"\.(xlsx|xls|csv)(\?|$)"i, _html_attr(link, "href"))]
+            download_urls = unique([_normalise_file_url(_absolute_url(_html_attr(link, "href"))) for link in download_links])
+            for link in download_links
                 href = _html_attr(link, "href")
-                occursin(r"\.(xlsx|xls|csv)(\?|$)"i, href) || continue
                 url = _normalise_file_url(_absolute_url(href))
                 previous = get(contexts, url, "")
+                length(download_urls) > 1 && !isempty(previous) && continue
                 if _context_score(text) > _context_score(previous)
                     contexts[url] = text
                 end

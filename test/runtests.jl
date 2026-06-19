@@ -772,6 +772,165 @@ end
     @test rows.value == [10.0, 11.5]
 end
 
+@testset "API helper edge cases" begin
+    api_dir = joinpath(default_cache_dir(), "api")
+    mkpath(api_dir)
+    write(joinpath(api_dir, "dataflows.json"), """
+    {
+      "Dataflows": {
+        "first": {
+          "id": "FLOW_A",
+          "name": {"en": "Flow A"},
+          "description": {"en": "First flow"}
+        },
+        "missing_id": {
+          "name": {"en": "Skipped"}
+        }
+      }
+    }
+    """)
+    flow_rows = dataflows()
+    @test flow_rows.id == ["FLOW_A"]
+    @test flow_rows.name == ["Flow A"]
+    @test flow_rows.description == ["First flow"]
+
+    alternate_structure = JSON3.read("""
+    {
+      "dimensions": {
+        "one": {
+          "id": "DIM_A",
+          "name": "Dimension A",
+          "position": "2",
+          "localRepresentation": {"enumeration": {"ref": "CL_A"}}
+        }
+      },
+      "Codelists": {
+        "CL_A": {
+          "id": "CL_A",
+          "codes": [
+            {"id": "X", "name": "Code X"}
+          ]
+        }
+      }
+    }
+    """)
+    alternate = AusStats._datastructure_dataframe(alternate_structure)
+    @test alternate.dimension_id == ["DIM_A"]
+    @test alternate.position == [3]
+    @test alternate.code == ["X"]
+    @test alternate.label == ["Code X"]
+
+    no_codes = AusStats._datastructure_dataframe(JSON3.read("""
+    {"structure": {"dimensions": {"series": [{"id": "FREE_TEXT", "name": "Free text"}]}}}
+    """))
+    @test nrow(no_codes) == 1
+    @test ismissing(no_codes.code[1])
+    @test api_key("MOCK") == "all"
+    @test_throws ArgumentError api_key("MOCK"; filters=["not" => "valid"])
+    @test AusStats._api_code_for_dimension(no_codes, "FREE_TEXT", "anything") == "anything"
+    @test_throws ArgumentError AusStats._api_dimensions(DataFrame(id=["x"]))
+
+    empty_sdmx = AusStats._sdmx_data_to_dataframe(JSON3.read("""{"dataSets": []}"""))
+    @test nrow(empty_sdmx) == 0
+    @test names(empty_sdmx) == ["period", "date", "value"]
+    odd_keys = AusStats._sdmx_data_to_dataframe(JSON3.read("""
+    {
+      "structure": {"dimensions": {
+        "series": [{"id": "DIM", "values": [{"id": "A"}]}],
+        "observation": [{"id": "TIME_PERIOD", "values": [{"id": "2024"}]}]
+      }},
+      "dataSets": [{"series": {"bad": {"observations": {"bad": [null]}}}}]
+    }
+    """))
+    @test nrow(odd_keys) == 1
+    @test odd_keys.period == ["bad"]
+    @test ismissing(odd_keys.date[1])
+    @test ismissing(odd_keys.value[1])
+end
+
+@testset "Download and discovery edge cases" begin
+    seed = AusStats._seed_for_catalogue("6202.0")
+    html = """
+    <html>
+      <head><meta name="description" content="Fixture description"></head>
+      <body>
+        <h1>Fixture Labour Force</h1>
+        <a href="/statistics/labour/employment-and-unemployment/labour-force-australia/archive">Past releases</a>
+        <a href="/statistics/labour/employment-and-unemployment/labour-force-australia/may-2026">Labour Force, Australia May 2026</a>
+        <section class="downloads">
+          <p>Table 3. Detailed labour force data <a href="/statistics/labour/employment-and-unemployment/labour-force-australia/may-2026/62020003.xlsx?download=1#file">Download xlsx [12 KB]</a></p>
+          <p>Payroll data cube <a href="//www.abs.gov.au/statistics/labour/employment-and-unemployment/labour-force-australia/may-2026/cube.csv">csv</a></p>
+        </section>
+      </body>
+    </html>
+    """
+    doc = AusStats._parse_html(html)
+    rows = AusStats._file_rows_dataframe(AusStats._discover_files_from_doc(
+        doc,
+        seed;
+        title="Fixture Labour Force",
+        description="Fixture description",
+        page_url="https://www.abs.gov.au/statistics/labour/employment-and-unemployment/labour-force-australia/may-2026",
+    ))
+    @test nrow(rows) == 2
+    @test "3" in rows.table_no
+    @test "may-2026" in rows.release_date
+    @test any(rows.is_cube)
+    table3 = rows[rows.table_no .== "3", :]
+    @test nrow(table3) == 1
+    @test only(table3.table_title) == "Table 3. Detailed labour force data"
+    @test only(rows[rows.is_cube, :table_no]) == ""
+    @test AusStats._archive_links(doc, seed) == ["https://www.abs.gov.au/statistics/labour/employment-and-unemployment/labour-force-australia/archive"]
+    @test AusStats._release_links(doc, seed) == ["https://www.abs.gov.au/statistics/labour/employment-and-unemployment/labour-force-australia/may-2026"]
+
+    @test AusStats._absolute_url(" HTTP://example.test/file.xlsx ") == "HTTP://example.test/file.xlsx"
+    @test AusStats._absolute_url("//example.test/file.xlsx") == "https://example.test/file.xlsx"
+    @test AusStats._absolute_url("relative/file.xlsx"; base="https://example.test/base/") == "https://example.test/base/relative/file.xlsx"
+    @test AusStats._safe_filename(" ?? ") == "download"
+    @test AusStats._url_filename("https://example.test/") == "download"
+    @test AusStats._file_type("https://example.test/download", "Detailed data cube") == "cube"
+    @test AusStats._file_type("https://example.test/download", "Plain file") == "unknown"
+    @test AusStats._release_date_from_text("Released 2026 September") == Date(2026, 9, 1)
+    @test AusStats._release_date_from_text("not a release") === nothing
+    @test AusStats._large_api_query_guidance(413) != ""
+    @test AusStats._large_api_query_guidance(404) == ""
+
+    legacy_rows = [Dict(
+        "cat_no" => "9999.0",
+        "title" => "Legacy",
+        "description" => "Legacy description",
+        "page_url" => "https://example.test/legacy",
+        "release_date" => "jan-2026",
+        "file_title" => "Table 7. Legacy table",
+        "url" => "https://example.test/legacy.xlsx",
+        "filename" => "legacy.xlsx",
+        "file_type" => "xlsx",
+        "table_no" => "7",
+        "is_timeseries" => true,
+        "is_cube" => false,
+    )]
+    mkpath(dirname(AusStats._index_path()))
+    open(AusStats._index_path(), "w") do io
+        JSON3.write(io, legacy_rows)
+    end
+    legacy_index = AusStats._read_index()
+    @test legacy_index.table_title == ["Table 7. Legacy table"]
+    AusStats._write_index(AusStats._file_rows_dataframe(AusStats._seed_file_rows()))
+
+    releases_df = AusStats._release_rows_dataframe([
+        AusStats._release_row(cat_no="9999.0", title="Bad", release_date=Date(2026, 2, 1), release_url="https://example.test/bad"),
+    ])
+    AusStats._write_release_index("9999.0", releases_df)
+    @test AusStats._read_release_index("9999.0").release_date == [Date(2026, 2, 1)]
+    write(AusStats._release_index_path("9999.0"), """[{"cat_no":"9999.0","title":"Bad date","release_date":"feb-2026","release_url":"https://example.test/bad"}]""")
+    @test nrow(AusStats._read_release_index("9999.0")) == 0
+
+    @test_throws ArgumentError AusStats._select_file("6202.0"; file="definitely missing", cube=false)
+    @test_throws ArgumentError AusStats._select_file("6202.0"; release="definitely missing", cube=false)
+    @test_throws ArgumentError AusStats._select_file("6401.0"; cube=true)
+    @test nrow(AusStats._files_for_release("6202.0", Date(1901, 1, 1); strict=false)) == 0
+end
+
 @testset "Core workflow regressions" begin
     index = convenience_fixture_index()
     @test nrow(index[index.cat_no .== "6202.0", :]) >= 2

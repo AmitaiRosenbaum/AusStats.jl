@@ -1,5 +1,7 @@
 # AusStats.jl
 
+[![CI](https://github.com/AmitaiRosenbaum/AusStats.jl/actions/workflows/ci.yml/badge.svg)](https://github.com/AmitaiRosenbaum/AusStats.jl/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/AmitaiRosenbaum/AusStats.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/AmitaiRosenbaum/AusStats.jl)
 [![Stable documentation](https://img.shields.io/badge/docs-stable-blue.svg)](https://AmitaiRosenbaum.github.io/AusStats.jl/stable)
 [![Development documentation](https://img.shields.io/badge/docs-dev-blue.svg)](https://AmitaiRosenbaum.github.io/AusStats.jl/dev)
 

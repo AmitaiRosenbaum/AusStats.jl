@@ -241,7 +241,7 @@ function _dimension_code_values(dimension, codelists::Dict{String,Any}=Dict{Stri
 
     if !isempty(codelist_id) && haskey(codelists, codelist_id)
         codes = _json_get(codelists[codelist_id], "items", Any[])
-        (codes isa AbstractVector || codes isa JSON3.Array) && return collect(codes)
+        (codes isa AbstractVector || codes isa JSON3.Array) && !isempty(codes) && return collect(codes)
         codes = _json_get(codelists[codelist_id], "codes", Any[])
         (codes isa AbstractVector || codes isa JSON3.Array) && return collect(codes)
     end
