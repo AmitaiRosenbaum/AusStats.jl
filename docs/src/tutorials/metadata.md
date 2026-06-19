@@ -1,6 +1,6 @@
 # Metadata
 
-ABS time-series workbooks store series metadata above the observation rows. AustralianStatistics.jl extracts that metadata into columns.
+ABS time-series workbooks store series metadata above the observation rows. AusStats.jl extracts that metadata into columns.
 
 ## Read Observation Data
 

@@ -1,6 +1,6 @@
 # [API Reference](@id api-reference)
 
-This page documents the full public API for AustralianStatistics.jl.
+This page documents the full public API for AusStats.jl.
 
 ## Discovery
 

@@ -5,7 +5,7 @@ This tutorial covers the shortest path from search to tidy ABS time-series data.
 ## Load The Package
 
 ```julia
-using AustralianStatistics
+using AusStats
 using DataFrames
 using Dates
 ```

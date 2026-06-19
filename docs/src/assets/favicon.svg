@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title">
-  <title id="title">AustralianStatistics.jl favicon</title>
+  <title id="title">AusStats.jl favicon</title>
   <defs><clipPath id="australia"><path d="M 20.5 161.3 L 30.7 120.3 L 69.1 97.3 L 110.1 64.0 L 148.5 61.4 L 184.3 84.5 L 227.8 99.8 L 245.8 140.8 L 212.5 186.9 L 169.0 199.7 L 133.1 163.8 L 97.3 166.4 L 56.3 184.3 Z"/></clipPath></defs>
   <rect width="256" height="256" fill="transparent"/>
   <g clip-path="url(#australia)">

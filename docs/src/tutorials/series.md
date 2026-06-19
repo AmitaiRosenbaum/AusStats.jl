@@ -1,6 +1,6 @@
 # Working With Series
 
-ABS time-series workbooks identify each series with a stable series id. AustralianStatistics.jl keeps that identifier in the `series_id` column.
+ABS time-series workbooks identify each series with a stable series id. AusStats.jl keeps that identifier in the `series_id` column.
 
 ## Read A Known Series
 

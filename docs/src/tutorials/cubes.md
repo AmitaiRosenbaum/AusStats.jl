@@ -6,7 +6,7 @@ and dates are already arranged as a time-series workbook. Use cubes when ABS
 publishes richer cross-tabulations or detailed dimensions that do not fit the
 standard time-series layout.
 
-AustralianStatistics.jl keeps [`read_cube`](@ref) generic, with specialized
+AusStats.jl keeps [`read_cube`](@ref) generic, with specialized
 parsers for recurring cube layouts where that improves the output.
 
 ## Search For Cubes

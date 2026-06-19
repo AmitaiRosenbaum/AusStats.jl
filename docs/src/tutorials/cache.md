@@ -1,6 +1,6 @@
 # Cache Management
 
-AustralianStatistics.jl caches indexes, workbooks, data cubes, parsed
+AusStats.jl caches indexes, workbooks, data cubes, parsed
 `DataFrame`s, and API metadata under the package cache directory.
 
 ## Cache Location

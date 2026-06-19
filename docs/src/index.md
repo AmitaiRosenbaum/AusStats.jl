@@ -1,6 +1,6 @@
-# AustralianStatistics.jl
+# AusStats.jl
 
-AustralianStatistics.jl is a Julia package for finding, downloading, reading, and tidying Australian Bureau of Statistics data.
+AusStats.jl is a Julia package for finding, downloading, reading, and tidying Australian Bureau of Statistics data.
 
 It is designed around ordinary Julia workflows: functions return `DataFrame`s,
 catalogue discovery is explicit, downloads are cached, and ABS time-series
@@ -16,7 +16,7 @@ The package has four main layers:
 ## Core Workflows
 
 ```julia
-using AustralianStatistics
+using AusStats
 
 search_abs("labour")
 

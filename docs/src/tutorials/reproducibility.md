@@ -1,6 +1,6 @@
 # Testing And Reproducibility
 
-AustralianStatistics.jl is designed so ordinary test runs do not depend on the
+AusStats.jl is designed so ordinary test runs do not depend on the
 ABS website. Network access is explicit, cached, and optional.
 
 ## Offline Tests
@@ -10,7 +10,7 @@ cube fixtures, and API response fixtures.
 
 ```julia
 using Pkg
-Pkg.test("AustralianStatistics")
+Pkg.test("AusStats")
 ```
 
 From a local checkout, you can also run:
@@ -26,7 +26,7 @@ The fixture notes are stored in `test/fixtures/README.md`.
 Online tests are skipped unless explicitly enabled:
 
 ```julia
-ENV["AUSTRALIANSTATISTICS_ONLINE_TESTS"] = "true"
+ENV["AusStats_ONLINE_TESTS"] = "true"
 include("test/runtests.jl")
 ```
 

@@ -1,6 +1,6 @@
 # Discovery
 
-AustralianStatistics.jl keeps a local index of ABS catalogues and downloadable files. Seed entries are available offline, and [`refresh_abs!`](@ref) can update the index from ABS publication pages.
+AusStats.jl keeps a local index of ABS catalogues and downloadable files. Seed entries are available offline, and [`refresh_abs!`](@ref) can update the index from ABS publication pages.
 
 ## Search
 

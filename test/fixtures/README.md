@@ -11,7 +11,7 @@ Workbook, cube, metadata, and API response fixtures are generated synthetically 
 Online tests are gated behind:
 
 ```sh
-AUSTRALIANSTATISTICS_ONLINE_TESTS=true
+AusStats_ONLINE_TESTS=true
 ```
 
 The online suite is intentionally small and avoids brittle assertions about exact latest values.

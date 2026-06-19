@@ -1,4 +1,4 @@
-module AustralianStatistics
+module AusStats
 
 using Dates
 using DataFrames
@@ -11,8 +11,9 @@ using Preferences
 using Serialization
 using SHA
 using Scratch
-using TOML
 using XLSX
+
+const VERSION = pkgversion(@__MODULE__)
 
 export read_abs, read_abs_url, read_abs_local, read_metadata, tidy_abs
 export read_cpi, read_awe, read_erp, read_job_mobility, read_payrolls

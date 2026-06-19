@@ -1,4 +1,4 @@
-using AustralianStatistics
+using AusStats
 using DataFrames
 using Dates
 using JSON3
@@ -207,22 +207,22 @@ function convenience_fixture_index()
         ("6160.0.55.001", "Weekly Payroll Jobs and Wages in Australia", "Weekly payroll jobs and wages time series.", "Table 1. Payroll Jobs", "6160.0.55.001_payrolls_table_001.xlsx"),
     ]
 
-    rows = AustralianStatistics._seed_file_rows()
+    rows = AusStats._seed_file_rows()
     for (cat_no, title, description, file_title, filename) in workbook_rows
-        push!(rows, AustralianStatistics._file_row(;
+        push!(rows, AusStats._file_row(;
             cat_no,
             title,
             description,
-            page_url = "https://example.test/$cat_no",
-            release_date = "apr-2026",
+            page_url="https://example.test/$cat_no",
+            release_date="apr-2026",
             file_title,
-            url = "https://example.test/$filename",
+            url="https://example.test/$filename",
             filename,
-            file_type = "xlsx",
-            table_no = "1",
-            table_title = file_title,
-            is_timeseries = true,
-            is_cube = false,
+            file_type="xlsx",
+            table_no="1",
+            table_title=file_title,
+            is_timeseries=true,
+            is_cube=false,
         ))
     end
 
@@ -232,25 +232,25 @@ function convenience_fixture_index()
         ("Labelled matrix Labour Force data cube", "6202.0_lfs_labelled_matrix_cube.xlsx"),
     ]
     for (file_title, filename) in cube_rows
-        push!(rows, AustralianStatistics._file_row(;
-            cat_no = "6202.0",
-            title = "Labour Force, Australia",
-            description = "Labour force data cubes.",
-            page_url = "https://example.test/6202.0",
-            release_date = "apr-2026",
+        push!(rows, AusStats._file_row(;
+            cat_no="6202.0",
+            title="Labour Force, Australia",
+            description="Labour force data cubes.",
+            page_url="https://example.test/6202.0",
+            release_date="apr-2026",
             file_title,
-            url = "https://example.test/$filename",
+            url="https://example.test/$filename",
             filename,
-            file_type = "xlsx",
-            table_no = "",
-            table_title = file_title,
-            is_timeseries = false,
-            is_cube = true,
+            file_type="xlsx",
+            table_no="",
+            table_title=file_title,
+            is_timeseries=false,
+            is_cube=true,
         ))
     end
 
-    index = AustralianStatistics._file_rows_dataframe(rows)
-    AustralianStatistics._write_index(index)
+    index = AusStats._file_rows_dataframe(rows)
+    AusStats._write_index(index)
 
     for row in eachrow(index[index.is_timeseries, :])
         sample_workbook(joinpath(default_cache_dir(), "workbooks", row.filename))
@@ -371,9 +371,9 @@ end
 
 function discovery_fixture_rows()
     html = read(joinpath(@__DIR__, "fixtures", "abs_publication_downloads.html"), String)
-    doc = AustralianStatistics._parse_html(html)
-    seed = first(AustralianStatistics.ABS_SEED_CATALOGUES)
-    return AustralianStatistics._file_rows_dataframe(AustralianStatistics._discover_files_from_doc(
+    doc = AusStats._parse_html(html)
+    seed = first(AusStats.ABS_SEED_CATALOGUES)
+    return AusStats._file_rows_dataframe(AusStats._discover_files_from_doc(
         doc,
         seed;
         title=seed.title,
@@ -384,16 +384,16 @@ end
 
 function archive_fixture_releases()
     html = read(joinpath(@__DIR__, "fixtures", "abs_archive_releases.html"), String)
-    doc = AustralianStatistics._parse_html(html)
-    seed = AustralianStatistics._seed_for_catalogue("6345.0")
-    return AustralianStatistics._release_rows_dataframe(AustralianStatistics._discover_releases_from_doc(doc, seed))
+    doc = AusStats._parse_html(html)
+    seed = AusStats._seed_for_catalogue("6345.0")
+    return AusStats._release_rows_dataframe(AusStats._discover_releases_from_doc(doc, seed))
 end
 
 function historical_release_fixture_rows()
     html = read(joinpath(@__DIR__, "fixtures", "abs_wpi_sep_2019_downloads.html"), String)
-    doc = AustralianStatistics._parse_html(html)
-    seed = AustralianStatistics._seed_for_catalogue("6345.0")
-    return AustralianStatistics._file_rows_dataframe(AustralianStatistics._discover_files_from_doc(
+    doc = AusStats._parse_html(html)
+    seed = AusStats._seed_for_catalogue("6345.0")
+    return AusStats._file_rows_dataframe(AusStats._discover_files_from_doc(
         doc,
         seed;
         title=seed.title,
@@ -402,7 +402,7 @@ function historical_release_fixture_rows()
     ))
 end
 
-@testset "AustralianStatistics" begin
+@testset "AusStats" begin
     @test "6202.0" in search_abs("labour").cat_no
     @test "6401.0" in search_abs("cpi").cat_no
     @test "6202.0" in catalogues().cat_no
@@ -430,23 +430,23 @@ end
     @test historical_files.release_date == fill("sep-2019", 2)
     @test "Table 1. Total hourly rates of pay excluding bonuses: Sector by State, Original" in historical_files.table_title
     @test "2b" in historical_files.table_no
-    AustralianStatistics._write_release_index("6345.0", archive_releases)
-    AustralianStatistics._write_release_file_index("6345.0", Date(2019, 9, 1), historical_files)
+    AusStats._write_release_index("6345.0", archive_releases)
+    AusStats._write_release_file_index("6345.0", Date(2019, 9, 1), historical_files)
 
     cache_dir = mktempdir()
-    selected = AustralianStatistics._select_file("6202.0"; cube=false)
+    selected = AusStats._select_file("6202.0"; cube=false)
     cached_path = joinpath(cache_dir, "workbooks", selected.filename)
     mkpath(dirname(cached_path))
     touch(cached_path)
     @test download_abs("6202.0"; dest=cache_dir) == cached_path
 
-    historical_selected = AustralianStatistics._select_file("6345.0"; release=Date(2019, 9, 1), cube=false)
+    historical_selected = AusStats._select_file("6345.0"; release=Date(2019, 9, 1), cube=false)
     historical_path = joinpath(cache_dir, "workbooks", historical_selected.filename)
     mkpath(dirname(historical_path))
     touch(historical_path)
     @test download_abs("6345.0"; release=Date(2019, 9, 1), dest=cache_dir) == historical_path
     message = try
-        AustralianStatistics._files_for_release("6345.0", Date(2019, 10, 1); strict=true)
+        AusStats._files_for_release("6345.0", Date(2019, 10, 1); strict=true)
         ""
     catch error
         sprint(showerror, error)
@@ -585,7 +585,7 @@ end
         missing,
     ])
     named_parts = separate_series(split_sample; names=[:measure, :sex, :aggregate])
-    @test names(named_parts)[end-2:end] == ["measure", "sex", "aggregate"]
+    @test names(named_parts)[(end-2):end] == ["measure", "sex", "aggregate"]
     @test named_parts.measure[1] == "All groups"
     @test named_parts.aggregate[1] == "Total"
 
@@ -679,15 +679,15 @@ end
     @test_throws ArgumentError api_key("MOCK"; filters=(unknown="1",))
     @test_throws ArgumentError api_key("MOCK"; filters=(sex_abs="9",))
 
-    filtered_url = AustralianStatistics._api_request_url("MOCK"; filters=(sex_abs="3", asgs_2016="0"), start_period="2024-Q1", params=(detail="dataonly",))
+    filtered_url = AusStats._api_request_url("MOCK"; filters=(sex_abs="3", asgs_2016="0"), start_period="2024-Q1", params=(detail="dataonly",))
     @test occursin("/data/ABS/MOCK/3.0./all?", filtered_url)
     @test occursin("detail=dataonly", filtered_url)
     @test occursin("startPeriod=2024-Q1", filtered_url)
-    explicit_url = AustralianStatistics._api_request_url("MOCK"; key="1.0.EMP", end_period="2024-Q2")
+    explicit_url = AusStats._api_request_url("MOCK"; key="1.0.EMP", end_period="2024-Q2")
     @test occursin("/data/ABS/MOCK/1.0.EMP/all?endPeriod=2024-Q2", explicit_url)
-    @test_throws ArgumentError AustralianStatistics._api_request_url("MOCK"; key="1", filters=(sex_abs="3",))
+    @test_throws ArgumentError AusStats._api_request_url("MOCK"; key="1", filters=(sex_abs="3",))
 
-    api_rows = AustralianStatistics._sdmx_data_to_dataframe(api_data_fixture())
+    api_rows = AusStats._sdmx_data_to_dataframe(api_data_fixture())
     @test nrow(api_rows) == 2
     @test api_rows.period == ["2024-Q1", "2024-Q2"]
     @test api_rows.date == [Date(2024, 1, 1), Date(2024, 4, 1)]
@@ -765,7 +765,7 @@ end
     @test api_key("MOCK"; filters=(sex_abs="Persons", measure="EMP")) == "3..EMP"
     @test_throws ArgumentError api_key("MOCK"; filters=(sex_abs="9",))
 
-    rows = AustralianStatistics._sdmx_data_to_dataframe(api_data_fixture())
+    rows = AusStats._sdmx_data_to_dataframe(api_data_fixture())
     @test nrow(rows) == 2
     @test rows.period == ["2024-Q1", "2024-Q2"]
     @test rows.date == [Date(2024, 1, 1), Date(2024, 4, 1)]
@@ -776,7 +776,7 @@ end
     index = convenience_fixture_index()
     @test nrow(index[index.cat_no .== "6202.0", :]) >= 2
 
-    selected = AustralianStatistics._select_file("6202.0"; cube=false)
+    selected = AusStats._select_file("6202.0"; cube=false)
     sample_workbook(joinpath(default_cache_dir(), "workbooks", selected.filename))
 
     table_one = read_abs("6202.0"; tables=1)
@@ -794,7 +794,7 @@ end
 end
 
 function _online_tests_enabled()
-    return lowercase(get(ENV, "AUSTRALIANSTATISTICS_ONLINE_TESTS", "false")) in ("1", "true", "yes")
+    return lowercase(get(ENV, "AusStats_ONLINE_TESTS", "false")) in ("1", "true", "yes")
 end
 
 if _online_tests_enabled()
@@ -811,7 +811,7 @@ if _online_tests_enabled()
     end
 
     @testset "Online historical release" begin
-        files_2019 = AustralianStatistics._files_for_release("6345.0", Date(2019, 9, 1); refresh=true, strict=true)
+        files_2019 = AusStats._files_for_release("6345.0", Date(2019, 9, 1); refresh=true, strict=true)
         @test nrow(files_2019) >= 1
         @test all(files_2019.release_date .== "sep-2019")
         timeseries_2019 = files_2019[files_2019.is_timeseries, :]
@@ -821,5 +821,5 @@ if _online_tests_enabled()
         @test isfile(wpi)
     end
 else
-    @info "Skipping online tests; set AUSTRALIANSTATISTICS_ONLINE_TESTS=true to enable latest and historical release checks."
+    @info "Skipping online tests; set AusStats_ONLINE_TESTS=true to enable latest and historical release checks."
 end

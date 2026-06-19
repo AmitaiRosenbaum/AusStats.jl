@@ -1,6 +1,6 @@
-# AustralianStatistics.jl
+# AusStats.jl
 
-AustralianStatistics.jl helps Julia users discover, download, read, and tidy
+AusStats.jl helps Julia users discover, download, read, and tidy
 Australian Bureau of Statistics data.
 
 The package is DataFrame-first. It keeps the generic workflows composable while
@@ -17,7 +17,7 @@ pkg> dev .
 ## Common Workflow
 
 ```julia
-using AustralianStatistics
+using AusStats
 using Dates
 
 search_abs("labour")
@@ -95,6 +95,6 @@ and read options. Pass `cache_parsed=false` for a one-off uncached read or
 Offline tests are deterministic. Online integration tests are opt-in:
 
 ```julia
-ENV["AUSTRALIANSTATISTICS_ONLINE_TESTS"] = "true"
+ENV["AusStats_ONLINE_TESTS"] = "true"
 include("test/runtests.jl")
 ```

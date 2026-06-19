@@ -1,11 +1,11 @@
 using Documenter
 
 push!(LOAD_PATH, joinpath(@__DIR__, ".."))
-using AustralianStatistics
+using AusStats
 
 makedocs(;
-    sitename="AustralianStatistics.jl",
-    modules=[AustralianStatistics],
+    sitename="AusStats.jl",
+    modules=[AusStats],
     format=Documenter.HTML(;
         prettyurls=get(ENV, "CI", "false") == "true",
         assets=[

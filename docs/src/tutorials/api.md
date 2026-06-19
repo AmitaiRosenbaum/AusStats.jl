@@ -1,6 +1,6 @@
 # ABS API
 
-AustralianStatistics.jl includes a small ABS API client for workflows where spreadsheet files are not the best fit.
+AusStats.jl includes a small ABS API client for workflows where spreadsheet files are not the best fit.
 
 ## List Dataflows
 
@@ -70,7 +70,7 @@ observations = read_api(
 ```
 
 If the ABS API returns a large-query or timeout-style error,
-AustralianStatistics.jl rethrows it with guidance to narrow filters or periods.
+AusStats.jl rethrows it with guidance to narrow filters or periods.
 
 ## Read A Direct API URL
 
