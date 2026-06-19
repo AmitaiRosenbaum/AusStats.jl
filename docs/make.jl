@@ -14,6 +14,13 @@ makedocs(;
     ),
     pages=[
         "Home" => "index.md",
+        "Tutorials" => [
+            "Getting Started" => "tutorials/getting-started.md",
+            "Reading Tables" => "tutorials/reading-tables.md",
+            "Working With Series" => "tutorials/series.md",
+            "Cache Management" => "tutorials/cache.md",
+        ],
+        "API Reference" => "api.md",
     ],
     checkdocs=:exports,
 )
