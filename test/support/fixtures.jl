@@ -1,3 +1,7 @@
+const TEST_FIXTURE_DIR = joinpath(dirname(@__DIR__), "fixtures")
+
+fixture_path(parts...) = joinpath(TEST_FIXTURE_DIR, parts...)
+
 function sample_workbook(path=tempname() * ".xlsx")
     mkpath(dirname(path))
     XLSX.openxlsx(path, mode="w") do xf
@@ -363,7 +367,7 @@ function metadata_layout_workbook(path=tempname() * ".xlsx")
 end
 
 function discovery_fixture_rows()
-    html = read(joinpath(@__DIR__, "fixtures", "abs_publication_downloads.html"), String)
+    html = read(fixture_path("abs_publication_downloads.html"), String)
     doc = AusStats._parse_html(html)
     seed = first(AusStats.ABS_SEED_CATALOGUES)
     return AusStats._file_rows_dataframe(AusStats._discover_files_from_doc(
@@ -376,14 +380,14 @@ function discovery_fixture_rows()
 end
 
 function archive_fixture_releases()
-    html = read(joinpath(@__DIR__, "fixtures", "abs_archive_releases.html"), String)
+    html = read(fixture_path("abs_archive_releases.html"), String)
     doc = AusStats._parse_html(html)
     seed = AusStats._seed_for_catalogue("6345.0")
     return AusStats._release_rows_dataframe(AusStats._discover_releases_from_doc(doc, seed))
 end
 
 function historical_release_fixture_rows()
-    html = read(joinpath(@__DIR__, "fixtures", "abs_wpi_sep_2019_downloads.html"), String)
+    html = read(fixture_path("abs_wpi_sep_2019_downloads.html"), String)
     doc = AusStats._parse_html(html)
     seed = AusStats._seed_for_catalogue("6345.0")
     return AusStats._file_rows_dataframe(AusStats._discover_files_from_doc(
