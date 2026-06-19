@@ -1,6 +1,7 @@
 using AustralianStatistics
 using DataFrames
 using Dates
+using Gumbo
 using Test
 using XLSX
 
@@ -105,11 +106,37 @@ function period_workbook()
     return path
 end
 
+function discovery_fixture_rows()
+    html = read(joinpath(@__DIR__, "fixtures", "abs_publication_downloads.html"), String)
+    doc = Gumbo.parsehtml(html)
+    seed = first(AustralianStatistics.ABS_SEED_CATALOGUES)
+    return AustralianStatistics._file_rows_dataframe(AustralianStatistics._discover_files_from_doc(
+        doc,
+        seed;
+        title=seed.title,
+        description=seed.description,
+        page_url="https://www.abs.gov.au/statistics/labour/employment-and-unemployment/labour-force-australia/apr-2026",
+    ))
+end
+
 @testset "AustralianStatistics v0.2" begin
     @test "6202.0" in search_abs("labour").cat_no
     @test "6401.0" in search_abs("cpi").cat_no
     @test "6202.0" in catalogues().cat_no
     @test nrow(files("6202.0")) >= 1
+
+    discovered = discovery_fixture_rows()
+    @test nrow(discovered) == 3
+    @test all(startswith.(discovered.url, "https://www.abs.gov.au/"))
+    @test all(discovered.file_type .== "xlsx")
+    @test discovered.release_date == fill("apr-2026", 3)
+    @test "Download xlsx [750.18 KB]" ∉ discovered.file_title
+    @test "Table 1. Labour force status by Sex, Australia - Trend, Seasonally adjusted and Original" in discovered.file_title
+    @test "Table 1. Labour force status by Sex, Australia - Trend, Seasonally adjusted and Original" in discovered.table_title
+    @test discovered[discovered.table_no .== "2", :file_title] == ["Table 2. Labour force status by State, Territory and Sex - Trend"]
+    @test nrow(discovered[discovered.table_no .== "2", :]) == 1
+    @test any(discovered.is_cube)
+    @test only(discovered[discovered.is_cube, :table_title]) == "Labour Force, Australia, detailed, quarterly, data cube"
 
     cache_dir = mktempdir()
     selected = AustralianStatistics._select_file("6202.0"; cube=false)

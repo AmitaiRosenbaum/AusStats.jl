@@ -120,6 +120,7 @@ function search_abs(query::AbstractString; refresh::Bool=false)
             row.title,
             row.description,
             row.file_title,
+            row.table_title,
             row.filename,
         ), " "))
         occursin(needle, haystack)
@@ -219,6 +220,7 @@ function _read_index()
     parsed = JSON3.read(read(path, String))
     rows = NamedTuple[]
     for item in parsed
+        table_title = hasproperty(item, :table_title) ? String(item.table_title) : String(item.file_title)
         push!(rows, _file_row(;
             cat_no = String(item.cat_no),
             title = String(item.title),
@@ -230,6 +232,7 @@ function _read_index()
             filename = String(item.filename),
             file_type = String(item.file_type),
             table_no = String(item.table_no),
+            table_title,
             is_timeseries = Bool(item.is_timeseries),
             is_cube = Bool(item.is_cube),
         ))
@@ -269,29 +272,36 @@ end
 function _discover_files_from_doc(doc, seed; title, description, page_url)
     rows = NamedTuple[]
     release_date = something(_release_from_url(page_url), _release_from_url(seed.url), "")
+    contexts = _download_link_contexts(doc)
+    by_url = Dict{String,NamedTuple}()
 
     for link in eachmatch(Cascadia.Selector("a[href]"), doc.root)
         href = Gumbo.getattr(link, "href")
         occursin(r"\.(xlsx|xls|csv)(\?|$)"i, href) || continue
-        url = _absolute_url(href)
-        label = strip(Gumbo.text(link))
-        isempty(label) && (label = _url_filename(url))
-        push!(rows, _file_row(;
+        url = _normalise_file_url(_absolute_url(href))
+        label = _clean_discovery_text(Gumbo.text(link))
+        context = get(contexts, url, "")
+        file_title = _best_file_title(label, context, url)
+        table_title = _best_table_title(file_title, context, url)
+        row = _file_row(;
             cat_no = seed.cat_no,
             title,
             description,
             page_url,
             release_date = something(_release_from_url(url), release_date),
-            file_title = label,
+            file_title,
             url,
-            filename = _indexed_filename(seed.cat_no, url, label),
-            file_type = _file_type(url, label),
-            table_no = something(_table_no(label), _table_no(url), _table_no_from_filename(seed.cat_no, url), ""),
-            is_timeseries = !_looks_like_cube(label, url),
-            is_cube = _looks_like_cube(label, url),
-        ))
+            filename = _indexed_filename(seed.cat_no, url, file_title),
+            file_type = _file_type(url, file_title),
+            table_no = something(_table_no(file_title), _table_no(context), _table_no(url), _table_no_from_filename(seed.cat_no, url), ""),
+            table_title,
+            is_timeseries = !_looks_like_cube(file_title, url),
+            is_cube = _looks_like_cube(file_title, url),
+        )
+        by_url[url] = _better_file_row(get(by_url, url, nothing), row)
     end
 
+    append!(rows, values(by_url))
     return rows
 end
 
@@ -330,12 +340,13 @@ function _seed_to_row(seed)
         filename = seed.filename,
         file_type = "xlsx",
         table_no = seed.table_no,
+        table_title = seed.file_title,
         is_timeseries = seed.is_timeseries,
         is_cube = seed.is_cube,
     )
 end
 
-function _file_row(; cat_no, title, description, page_url, release_date, file_title, url, filename, file_type, table_no, is_timeseries, is_cube)
+function _file_row(; cat_no, title, description, page_url, release_date, file_title, url, filename, file_type, table_no, table_title=file_title, is_timeseries, is_cube)
     return (
         cat_no = String(cat_no),
         title = String(title),
@@ -347,6 +358,7 @@ function _file_row(; cat_no, title, description, page_url, release_date, file_ti
         filename = String(filename),
         file_type = String(file_type),
         table_no = String(table_no),
+        table_title = String(table_title),
         is_timeseries = Bool(is_timeseries),
         is_cube = Bool(is_cube),
     )
@@ -364,9 +376,126 @@ function _file_rows_dataframe(rows)
         filename = [row.filename for row in rows],
         file_type = [row.file_type for row in rows],
         table_no = [row.table_no for row in rows],
+        table_title = [row.table_title for row in rows],
         is_timeseries = [row.is_timeseries for row in rows],
         is_cube = [row.is_cube for row in rows],
     )
+end
+
+function _download_link_contexts(doc)
+    contexts = Dict{String,String}()
+
+    for selector in ("tr", "li", "p", ".download", ".downloads", ".field--name-field-downloads", "article", "section")
+        for node in eachmatch(Cascadia.Selector(selector), doc.root)
+            text = _clean_discovery_text(Gumbo.text(node))
+            isempty(text) && continue
+            for link in eachmatch(Cascadia.Selector("a[href]"), node)
+                href = Gumbo.getattr(link, "href")
+                occursin(r"\.(xlsx|xls|csv)(\?|$)"i, href) || continue
+                url = _normalise_file_url(_absolute_url(href))
+                previous = get(contexts, url, "")
+                if _context_score(text) > _context_score(previous)
+                    contexts[url] = text
+                end
+            end
+        end
+    end
+
+    return contexts
+end
+
+function _best_file_title(label::AbstractString, context::AbstractString, url::AbstractString)
+    label = _clean_discovery_text(label)
+    context = _clean_discovery_text(context)
+
+    if !_generic_download_label(label)
+        return label
+    end
+
+    cleaned_context = _clean_context_title(context, label)
+    if !_generic_download_label(cleaned_context)
+        return cleaned_context
+    end
+
+    filename_title = _title_from_filename(url)
+    return isempty(filename_title) ? _url_filename(url) : filename_title
+end
+
+function _best_table_title(file_title::AbstractString, context::AbstractString, url::AbstractString)
+    context_title = _clean_context_title(context, "")
+    if !_generic_download_label(context_title) && _table_no(context_title) !== nothing
+        return context_title
+    end
+    return file_title
+end
+
+function _better_file_row(existing, candidate)
+    existing === nothing && return candidate
+    existing_score = _title_score(existing.file_title) + _title_score(existing.table_title)
+    candidate_score = _title_score(candidate.file_title) + _title_score(candidate.table_title)
+    return candidate_score >= existing_score ? candidate : existing
+end
+
+function _clean_context_title(context::AbstractString, label::AbstractString)
+    text = _clean_discovery_text(context)
+    isempty(text) && return ""
+
+    if !isempty(label)
+        text = replace(text, label => " ")
+    end
+    text = replace(text, r"(?i)(download)\s*(xlsx|xls|csv)?\s*(\[[^\]]+\])?" => s" \1 ")
+    text = replace(text, r"(?i)\bdownload\b\s*(xlsx|xls|csv)?\s*(\[[^\]]+\])?" => " ")
+    text = replace(text, r"(?i)\b(xlsx|xls|csv)\b\s*(\[[^\]]+\])?" => " ")
+    text = replace(text, r"\s+" => " ")
+    text = strip(text, [' ', '-', '|', ':'])
+    return text
+end
+
+function _clean_discovery_text(value)
+    text = replace(strip(string(value)), '\u00a0' => ' ')
+    text = replace(text, r"\s+" => " ")
+    return strip(text)
+end
+
+function _generic_download_label(value::AbstractString)
+    text = lowercase(_clean_discovery_text(value))
+    isempty(text) && return true
+    text = replace(text, r"\[[^\]]+\]" => "")
+    text = replace(text, r"\s+" => " ")
+    text = strip(text)
+    return text in ("download", "download xlsx", "download xls", "download csv", "xlsx", "xls", "csv") ||
+        occursin(r"^download\s+(xlsx|xls|csv)$", text)
+end
+
+function _context_score(value::AbstractString)
+    text = _clean_discovery_text(value)
+    isempty(text) && return 0
+    score = max(0, 300 - length(text))
+    _table_no(text) !== nothing && (score += 500)
+    _generic_download_label(text) && (score -= 500)
+    return score
+end
+
+function _title_score(value::AbstractString)
+    text = _clean_discovery_text(value)
+    isempty(text) && return 0
+    score = min(length(text), 200)
+    _generic_download_label(text) && (score -= 1000)
+    _table_no(text) !== nothing && (score += 500)
+    return score
+end
+
+function _normalise_file_url(url::AbstractString)
+    clean = split(strip(url), '#'; limit=2)[1]
+    return split(clean, '?'; limit=2)[1]
+end
+
+function _title_from_filename(url::AbstractString)
+    stem = splitext(_url_filename(url))[1]
+    stem = replace(stem, r"^[0-9]+[A-Za-z]*_?" => "")
+    stem = replace(stem, r"[_-]+" => " ")
+    stem = replace(stem, r"\s+" => " ")
+    return strip(stem)
 end
 
 function _first_text(doc, selector::AbstractString)

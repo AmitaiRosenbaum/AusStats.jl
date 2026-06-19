@@ -10,7 +10,7 @@ function search_cubes(query::AbstractString; cat_no=nothing, refresh::Bool=false
     isempty(needle) && return cubes
 
     keep = map(eachrow(cubes)) do row
-        haystack = lowercase(join((row.cat_no, row.title, row.description, row.file_title, row.filename), " "))
+        haystack = lowercase(join((row.cat_no, row.title, row.description, row.file_title, row.table_title, row.filename), " "))
         occursin(needle, haystack)
     end
 
