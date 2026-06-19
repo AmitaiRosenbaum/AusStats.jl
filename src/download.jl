@@ -234,7 +234,7 @@ function _files_for_release(cat_no::AbstractString, release::Date; refresh::Bool
             ""
         end
         isempty(html) && continue
-        doc = Gumbo.parsehtml(html)
+        doc = _parse_html(html)
         title = isempty(row.title) ? seed.title : row.title
         append!(rows, _discover_files_from_doc(doc, seed; title, description=seed.description, page_url=row.release_url))
     end
@@ -317,11 +317,11 @@ function _refresh_release_index(cat_no::AbstractString)
 
     try
         html = _http_text(seed.page_url)
-        doc = Gumbo.parsehtml(html)
+        doc = _parse_html(html)
         append!(rows, _discover_releases_from_doc(doc, seed))
         for archive_url in _archive_links(doc, seed)
             archive_html = _http_text(archive_url)
-            archive_doc = Gumbo.parsehtml(archive_html)
+            archive_doc = _parse_html(archive_html)
             append!(rows, _discover_releases_from_doc(archive_doc, seed))
         end
     catch
@@ -417,12 +417,12 @@ end
 function _discover_releases_from_doc(doc, seed)
     by_url = Dict{String,NamedTuple}()
 
-    for link in eachmatch(Cascadia.Selector("a[href]"), doc.root)
-        href = Gumbo.getattr(link, "href")
+    for link in _html_links(doc)
+        href = _html_attr(link, "href")
         url = _absolute_url(href)
         _looks_like_release_url(url, seed) || continue
 
-        label = _clean_discovery_text(Gumbo.text(link))
+        label = _clean_discovery_text(_html_text(link))
         release_date = something(_release_date_from_text(label), _release_date_from_url(url), nothing)
         release_date === nothing && continue
 
@@ -443,9 +443,9 @@ end
 function _archive_links(doc, seed)
     urls = String[]
 
-    for link in eachmatch(Cascadia.Selector("a[href]"), doc.root)
-        href = Gumbo.getattr(link, "href")
-        label = lowercase(_clean_discovery_text(Gumbo.text(link)))
+    for link in _html_links(doc)
+        href = _html_attr(link, "href")
+        label = lowercase(_clean_discovery_text(_html_text(link)))
         url = _normalise_page_url(_absolute_url(href))
         startswith(url, seed.page_url) || continue
         haystack = lowercase(url * " " * label)
@@ -490,7 +490,7 @@ function _discover_seed_files(seed)
     rows = NamedTuple[]
     try
         html = _http_text(seed.page_url)
-        doc = Gumbo.parsehtml(html)
+        doc = _parse_html(html)
         title = something(_first_text(doc, "h1"), seed.title)
         description = something(_meta_content(doc, "description"), seed.description)
         append!(rows, _discover_files_from_doc(doc, seed; title, description, page_url=seed.page_url))
@@ -498,7 +498,7 @@ function _discover_seed_files(seed)
         if isempty(rows)
             for release_url in _release_links(doc, seed)
                 release_html = _http_text(release_url)
-                release_doc = Gumbo.parsehtml(release_html)
+                release_doc = _parse_html(release_html)
                 append!(rows, _discover_files_from_doc(release_doc, seed; title, description, page_url=release_url))
                 isempty(rows) || break
             end
@@ -517,11 +517,11 @@ function _discover_files_from_doc(doc, seed; title, description, page_url)
     contexts = _download_link_contexts(doc)
     by_url = Dict{String,NamedTuple}()
 
-    for link in eachmatch(Cascadia.Selector("a[href]"), doc.root)
-        href = Gumbo.getattr(link, "href")
+    for link in _html_links(doc)
+        href = _html_attr(link, "href")
         occursin(r"\.(xlsx|xls|csv)(\?|$)"i, href) || continue
         url = _normalise_file_url(_absolute_url(href))
-        label = _clean_discovery_text(Gumbo.text(link))
+        label = _clean_discovery_text(_html_text(link))
         context = get(contexts, url, "")
         file_title = _best_file_title(label, context, url)
         table_title = _best_table_title(file_title, context, url)
@@ -552,9 +552,9 @@ function _release_links(doc, seed)
     seed_path = replace(seed.page_url, ABS_BASE_URL => "")
     title_key = lowercase(first(split(seed.title, ",")))
 
-    for link in eachmatch(Cascadia.Selector("a[href]"), doc.root)
-        href = Gumbo.getattr(link, "href")
-        label = lowercase(strip(Gumbo.text(link)))
+    for link in _html_links(doc)
+        href = _html_attr(link, "href")
+        label = lowercase(strip(_html_text(link)))
         url = _absolute_url(href)
         path_match = startswith(url, seed.page_url * "/") || startswith(href, seed_path * "/")
         title_match = occursin(title_key, label)
@@ -647,11 +647,11 @@ function _download_link_contexts(doc)
     contexts = Dict{String,String}()
 
     for selector in ("tr", "li", "p", ".download", ".downloads", ".field--name-field-downloads", "article", "section")
-        for node in eachmatch(Cascadia.Selector(selector), doc.root)
-            text = _clean_discovery_text(Gumbo.text(node))
+        for node in _html_context_nodes(doc, selector)
+            text = _clean_discovery_text(_html_text(node))
             isempty(text) && continue
-            for link in eachmatch(Cascadia.Selector("a[href]"), node)
-                href = Gumbo.getattr(link, "href")
+            for link in _html_links(node)
+                href = _html_attr(link, "href")
                 occursin(r"\.(xlsx|xls|csv)(\?|$)"i, href) || continue
                 url = _normalise_file_url(_absolute_url(href))
                 previous = get(contexts, url, "")
@@ -663,6 +663,47 @@ function _download_link_contexts(doc)
     end
 
     return contexts
+end
+
+function _parse_html(html::AbstractString)
+    return EzXML.parsehtml(html)
+end
+
+function _html_findall(node, xpath::AbstractString)
+    return EzXML.findall(xpath, node)
+end
+
+function _html_links(node)
+    return _html_findall(node, ".//a[@href]")
+end
+
+function _html_context_nodes(doc, selector::AbstractString)
+    return _html_findall(doc, _selector_xpath(selector))
+end
+
+function _html_text(node)
+    return EzXML.nodecontent(node)
+end
+
+function _html_attr(node, name::AbstractString)
+    return haskey(node, name) ? string(node[name]) : ""
+end
+
+function _selector_xpath(selector::AbstractString)
+    selector == "h1" && return "//h1"
+    selector == "tr" && return "//tr"
+    selector == "li" && return "//li"
+    selector == "p" && return "//p"
+    selector == "article" && return "//article"
+    selector == "section" && return "//section"
+    selector == ".download" && return _class_xpath("download")
+    selector == ".downloads" && return _class_xpath("downloads")
+    selector == ".field--name-field-downloads" && return _class_xpath("field--name-field-downloads")
+    throw(ArgumentError(string("unsupported HTML selector `", selector, "`")))
+end
+
+function _class_xpath(class::AbstractString)
+    return string("//*[contains(concat(' ', normalize-space(@class), ' '), ' ", class, " ')]")
 end
 
 function _best_file_title(label::AbstractString, context::AbstractString, url::AbstractString)
@@ -765,17 +806,17 @@ function _title_from_filename(url::AbstractString)
 end
 
 function _first_text(doc, selector::AbstractString)
-    nodes = eachmatch(Cascadia.Selector(selector), doc.root)
+    nodes = _html_findall(doc, _selector_xpath(selector))
     isempty(nodes) && return nothing
-    text = strip(Gumbo.text(first(nodes)))
+    text = strip(_html_text(first(nodes)))
     return isempty(text) ? nothing : text
 end
 
 function _meta_content(doc, name::AbstractString)
-    selector = Cascadia.Selector("meta[name=\"$name\"]")
-    nodes = eachmatch(selector, doc.root)
+    nodes = _html_findall(doc, "//meta[@name]")
+    nodes = [node for node in nodes if lowercase(_html_attr(node, "name")) == lowercase(name)]
     isempty(nodes) && return nothing
-    content = Gumbo.getattr(first(nodes), "content")
+    content = _html_attr(first(nodes), "content")
     text = strip(content)
     return isempty(text) ? nothing : text
 end

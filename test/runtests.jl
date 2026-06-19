@@ -1,7 +1,6 @@
 using AustralianStatistics
 using DataFrames
 using Dates
-using Gumbo
 using JSON3
 using Test
 using XLSX
@@ -372,7 +371,7 @@ end
 
 function discovery_fixture_rows()
     html = read(joinpath(@__DIR__, "fixtures", "abs_publication_downloads.html"), String)
-    doc = Gumbo.parsehtml(html)
+    doc = AustralianStatistics._parse_html(html)
     seed = first(AustralianStatistics.ABS_SEED_CATALOGUES)
     return AustralianStatistics._file_rows_dataframe(AustralianStatistics._discover_files_from_doc(
         doc,
@@ -385,14 +384,14 @@ end
 
 function archive_fixture_releases()
     html = read(joinpath(@__DIR__, "fixtures", "abs_archive_releases.html"), String)
-    doc = Gumbo.parsehtml(html)
+    doc = AustralianStatistics._parse_html(html)
     seed = AustralianStatistics._seed_for_catalogue("6345.0")
     return AustralianStatistics._release_rows_dataframe(AustralianStatistics._discover_releases_from_doc(doc, seed))
 end
 
 function historical_release_fixture_rows()
     html = read(joinpath(@__DIR__, "fixtures", "abs_wpi_sep_2019_downloads.html"), String)
-    doc = Gumbo.parsehtml(html)
+    doc = AustralianStatistics._parse_html(html)
     seed = AustralianStatistics._seed_for_catalogue("6345.0")
     return AustralianStatistics._file_rows_dataframe(AustralianStatistics._discover_files_from_doc(
         doc,

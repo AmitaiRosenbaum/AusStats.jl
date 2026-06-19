@@ -3,8 +3,7 @@ module AustralianStatistics
 using Dates
 using DataFrames
 using Downloads
-using Cascadia
-using Gumbo
+using EzXML
 using HTTP
 using JSON3
 using Preferences
