@@ -1,39 +1,144 @@
 """
-    read_abs(path_or_url; sheet=nothing, tables=nothing, header_row=nothing, download_dir=tempdir())
+    read_abs(source; tables=nothing, release=:latest, tidy=true, cache=true)
 
-Read an ABS spreadsheet into a `DataFrame`.
-
-When `tables` is supplied, matching ABS time-series sheets are parsed into tidy
-long format. When `sheet` and `tables` are omitted, the first worksheet is read
-as a raw table.
+Read ABS data from a catalogue number, URL, or local workbook path. Time-series
+workbooks are returned as tidy long-format `DataFrame`s by default.
 """
-function read_abs(path_or_url::AbstractString; sheet=nothing, tables=nothing, header_row::Union{Int,Nothing}=nothing, download_dir::AbstractString=tempdir())
-    path = _local_path(path_or_url; download_dir)
-
-    XLSX.openxlsx(path) do xf
-        sheetnames = XLSX.sheetnames(xf)
-
-        if tables !== nothing
-            header_row === nothing || throw(ArgumentError("`header_row` is only supported for raw sheet reads; omit it when using `tables`"))
-            selected = _matching_tables(sheetnames, tables)
-            return _read_tables(xf, selected)
-        end
-
-        sheetname = something(sheet, first(sheetnames))
-        return _read_sheet(xf[sheetname]; header_row)
+function read_abs(source::AbstractString; tables=nothing, release=:latest, tidy::Bool=true, cache::Bool=true)
+    if _is_url(source)
+        return read_abs_url(source; tables, tidy, cache)
+    elseif isfile(source)
+        return read_abs_local(source; tables, tidy)
     end
+
+    row = _select_file(source; release, cube=false)
+    path = cache ? download_abs(source; file=row.filename, release) : _download_file(row.url; dest=mktempdir(), filename=row.filename, force=true)
+    return _read_workbook(path; tables, tidy, cat_no=row.cat_no, release_date=row.release_date)
 end
 
-function _read_tables(xf, sheetnames)
+"""
+    read_abs_url(url; tables=nothing, tidy=true, cache=true)
+
+Read an ABS workbook directly from `url`.
+"""
+function read_abs_url(url::AbstractString; tables=nothing, tidy::Bool=true, cache::Bool=true)
+    dest = cache ? _cache_subdir(:workbooks) : mktempdir()
+    path = _download_file(url; dest, force=!cache)
+    return _read_workbook(path; tables, tidy)
+end
+
+"""
+    read_abs_local(path; tables=nothing, tidy=true)
+
+Read an ABS workbook from a local file.
+"""
+function read_abs_local(path::AbstractString; tables=nothing, tidy::Bool=true)
+    return _read_workbook(path; tables, tidy)
+end
+
+"""
+    read_metadata(source; tables=nothing)
+
+Return one row per ABS series with the metadata available in `source`.
+"""
+function read_metadata(source::AbstractString; tables=nothing)
+    df = read_abs(source; tables, tidy=true)
+    isempty(df) && return select(df, Not([:date, :value]))
+    cols = [name for name in names(df) if name ∉ ("date", "value")]
+    return unique(select(df, cols))
+end
+
+"""
+    read_series(series_id; cat_no=nothing, tables=nothing, release=:latest, cache=true)
+
+Read observations for one or more ABS series identifiers.
+"""
+function read_series(series_id; cat_no=nothing, tables=nothing, release=:latest, cache::Bool=true)
+    ids = series_id isa AbstractString ? [series_id] : collect(series_id)
+    needles = Set(lowercase(strip(string(id))) for id in ids)
+
+    catalogue_list = cat_no === nothing ? catalogues().cat_no : (cat_no isa AbstractString ? [cat_no] : collect(cat_no))
     out = _empty_tidy_abs()
 
-    for sheetname in sheetnames
-        table = _tidy_sheet(xf[sheetname], sheetname)
-        isempty(table) && continue
-        append!(out, table)
+    for catalogue in catalogue_list
+        df = try
+            read_abs(string(catalogue); tables, release, tidy=true, cache)
+        catch
+            continue
+        end
+        matches = _series_matches(df, needles)
+        isempty(matches) || append!(out, matches)
     end
 
     return out
+end
+
+"""
+    separate_series(df; column=:series)
+
+Split a descriptive ABS series column into simple component columns. Components
+are split on semicolons, pipes, or repeated comma-separated phrases.
+"""
+function separate_series(df::DataFrame; column=:series)
+    name = Symbol(column)
+    hasproperty(df, name) || throw(ArgumentError("column `$column` was not found"))
+
+    parts = [ismissing(value) ? String[] : _series_parts(string(value)) for value in df[!, name]]
+    max_parts = maximum(length, parts; init=0)
+    out = copy(df)
+
+    for index in 1:max_parts
+        out[!, Symbol("$(name)_part_$index")] = [index <= length(row_parts) ? row_parts[index] : missing for row_parts in parts]
+    end
+
+    return out
+end
+
+"""
+    latest_date(df; date=:date)
+
+Return the latest non-missing date in `df`.
+"""
+function latest_date(df::DataFrame; date=:date)
+    name = Symbol(date)
+    hasproperty(df, name) || throw(ArgumentError("column `$date` was not found"))
+    values = collect(skipmissing(df[!, name]))
+    isempty(values) && return missing
+    return maximum(values)
+end
+
+function _read_workbook(path::AbstractString; tables=nothing, tidy::Bool=true, cat_no=missing, release_date=missing)
+    if tidy
+        return _read_tidy_workbook(path; tables, cat_no, release_date)
+    end
+
+    return _read_raw_workbook(path; tables)
+end
+
+function _read_tidy_workbook(path::AbstractString; tables=nothing, cat_no=missing, release_date=missing)
+    if tables === nothing
+        return tidy_abs(path; cat_no, release_date)
+    end
+
+    out = _empty_tidy_abs()
+    XLSX.openxlsx(path) do xf
+        sheetnames = XLSX.sheetnames(xf)
+        selected = _matching_tables(sheetnames, tables)
+        for sheetname in selected
+            sheet_index = findfirst(==(sheetname), sheetnames)
+            table = _tidy_sheet(xf[sheetname], sheetname; cat_no, release_date, sheet_index=something(sheet_index, 1))
+            isempty(table) || append!(out, table)
+        end
+    end
+    return out
+end
+
+function _read_raw_workbook(path::AbstractString; tables=nothing)
+    XLSX.openxlsx(path) do xf
+        sheetnames = XLSX.sheetnames(xf)
+        selected = tables === nothing ? [first(sheetnames)] : _matching_tables(sheetnames, tables)
+        return _read_sheet(xf[first(selected)])
+    end
 end
 
 function _matching_tables(sheetnames, tables)
@@ -41,8 +146,7 @@ function _matching_tables(sheetnames, tables)
     matches = String[]
 
     for request in requested
-        request_matches = [sheetname for sheetname in sheetnames if _table_matches(sheetname, request)]
-        append!(matches, request_matches)
+        append!(matches, [sheetname for sheetname in sheetnames if _table_matches(sheetname, request)])
     end
 
     unique_matches = unique(matches)
@@ -65,7 +169,7 @@ function _table_matches(sheetname::AbstractString, request)
 
     sheet_key == request_key && return true
 
-    request_number = _table_number(request)
+    request_number = _request_table_number(request)
     if request_number !== nothing
         return any(number -> number == request_number, _numbers_in_text(sheetname))
     end
@@ -77,76 +181,37 @@ function _table_key(value)
     return replace(lowercase(strip(string(value))), r"\s+" => "")
 end
 
-function _table_number(value)
-    value isa Integer && return Int(value)
-
+function _request_table_number(value)
+    value isa Integer && return string(Int(value))
     text = string(value)
-    match_result = match(r"\d+", text)
+    match_result = match(r"\d+[a-z]?", lowercase(text))
     match_result === nothing && return nothing
-    return parse(Int, match_result.match)
+    return match_result.match
 end
 
 function _numbers_in_text(value)
-    return [parse(Int, match.match) for match in eachmatch(r"\d+", string(value))]
+    return [match.match for match in eachmatch(r"\d+[a-z]?", lowercase(string(value)))]
 end
 
-"""
-    read_abs_series(series_id; cat_no=nothing, cache=true)
-
-Read rows for `series_id` from supported ABS catalogue workbooks. When `cat_no`
-is omitted, all currently supported catalogues are searched.
-"""
-function read_abs_series(series_id::AbstractString; cat_no=nothing, cache::Bool=true)
-    catalogues = cat_no === nothing ? _supported_catalogues() : [strip(string(cat_no))]
-    out = _empty_tidy_abs()
-
-    for catalogue in catalogues
-        path = _catalogue_workbook(catalogue; cache)
-        matches = _series_matches(tidy_abs(path), series_id)
-        isempty(matches) || append!(out, matches)
-    end
-
-    return out
-end
-
-function _supported_catalogues()
-    return sort(collect(keys(ABS_TIME_SERIES_WORKBOOKS)))
-end
-
-function _catalogue_workbook(cat_no::AbstractString; cache::Bool=true)
-    if cache
-        return download_abs(cat_no)
-    end
-
-    return download_abs(cat_no; dest=mktempdir(), force=true)
-end
-
-function _series_matches(df::DataFrame, series_id::AbstractString)
+function _series_matches(df::DataFrame, needles::Set{String})
     isempty(df) && return df
 
-    needle = lowercase(strip(series_id))
     keep = map(df.series_id) do candidate
-        lowercase(strip(string(candidate))) == needle
+        lowercase(strip(string(candidate))) in needles
     end
 
     return df[keep, :]
 end
 
-function _local_path(path_or_url::AbstractString; download_dir::AbstractString)
-    if startswith(lowercase(path_or_url), "http://") || startswith(lowercase(path_or_url), "https://")
-        return _download_file(path_or_url; dest=download_dir)
-    end
-
-    if haskey(ABS_TIME_SERIES_WORKBOOKS, strip(path_or_url))
-        return download_abs(path_or_url)
-    end
-
-    return path_or_url
+function _series_parts(value::AbstractString)
+    delimiter = occursin(";", value) ? r"\s*;\s*" : occursin("|", value) ? r"\s*\|\s*" : r"\s*,\s*"
+    parts = [strip(part) for part in split(value, delimiter) if !isempty(strip(part))]
+    return parts
 end
 
-function _looks_like_series_column(name)
-    text = lowercase(string(name))
-    return occursin("series", text) || occursin("time", text) || occursin("date", text) || occursin("period", text)
+function _is_url(value::AbstractString)
+    text = lowercase(strip(value))
+    return startswith(text, "http://") || startswith(text, "https://")
 end
 
 function _empty_series_value(value)
