@@ -34,6 +34,18 @@ search_cubes
 read_cube
 ```
 
+## Convenience Readers
+
+```@docs
+read_cpi
+read_awe
+read_erp
+read_job_mobility
+read_payrolls
+read_lfs_grossflows
+read_lfs_cube
+```
+
 ## ABS API
 
 ```@docs

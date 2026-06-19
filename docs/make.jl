@@ -21,6 +21,7 @@ makedocs(;
             "Metadata" => "tutorials/metadata.md",
             "Working With Series" => "tutorials/series.md",
             "Data Cubes" => "tutorials/cubes.md",
+            "Convenience Readers" => "tutorials/convenience.md",
             "ABS API" => "tutorials/api.md",
             "Cache Management" => "tutorials/cache.md",
         ],

@@ -60,6 +60,7 @@ function sample_workbook(path=tempname() * ".xlsx")
 end
 
 function cube_workbook(path=tempname() * ".xlsx")
+    mkpath(dirname(path))
     XLSX.openxlsx(path, mode="w") do xf
         sheet = xf[1]
         XLSX.rename!(sheet, "Cube 1")
@@ -71,6 +72,68 @@ function cube_workbook(path=tempname() * ".xlsx")
         sheet["B3"] = 2.0
     end
     return path
+end
+
+function convenience_fixture_index()
+    workbook_rows = [
+        ("6302.0", "Average Weekly Earnings, Australia", "Average weekly earnings time series.", "Table 1. Average Weekly Earnings", "6302.0_awe_table_001.xlsx"),
+        ("3101.0", "National, state and territory population", "Estimated resident population time series.", "Table 1. Estimated Resident Population", "3101.0_erp_table_001.xlsx"),
+        ("6226.0", "Job Mobility, Australia", "Job mobility time series.", "Table 1. Job Mobility", "6226.0_job_mobility_table_001.xlsx"),
+        ("6160.0.55.001", "Weekly Payroll Jobs and Wages in Australia", "Weekly payroll jobs and wages time series.", "Table 1. Payroll Jobs", "6160.0.55.001_payrolls_table_001.xlsx"),
+    ]
+
+    rows = AustralianStatistics._seed_file_rows()
+    for (cat_no, title, description, file_title, filename) in workbook_rows
+        push!(rows, AustralianStatistics._file_row(;
+            cat_no,
+            title,
+            description,
+            page_url = "https://example.test/$cat_no",
+            release_date = "apr-2026",
+            file_title,
+            url = "https://example.test/$filename",
+            filename,
+            file_type = "xlsx",
+            table_no = "1",
+            table_title = file_title,
+            is_timeseries = true,
+            is_cube = false,
+        ))
+    end
+
+    cube_rows = [
+        ("Detailed Labour Force data cube", "6202.0_lfs_detailed_cube.xlsx"),
+        ("Gross flows data cube", "6202.0_lfs_gross_flows_cube.xlsx"),
+    ]
+    for (file_title, filename) in cube_rows
+        push!(rows, AustralianStatistics._file_row(;
+            cat_no = "6202.0",
+            title = "Labour Force, Australia",
+            description = "Labour force data cubes.",
+            page_url = "https://example.test/6202.0",
+            release_date = "apr-2026",
+            file_title,
+            url = "https://example.test/$filename",
+            filename,
+            file_type = "xlsx",
+            table_no = "",
+            table_title = file_title,
+            is_timeseries = false,
+            is_cube = true,
+        ))
+    end
+
+    index = AustralianStatistics._file_rows_dataframe(rows)
+    AustralianStatistics._write_index(index)
+
+    for row in eachrow(index[index.is_timeseries, :])
+        sample_workbook(joinpath(default_cache_dir(), "workbooks", row.filename))
+    end
+    for row in eachrow(index[index.is_cube, :])
+        cube_workbook(joinpath(default_cache_dir(), "cubes", row.filename))
+    end
+
+    return index
 end
 
 function period_workbook()
@@ -402,6 +465,29 @@ end
     cube = read_cube(cube_workbook())
     @test cube isa DataFrame
     @test cube.sheet == ["Cube 1", "Cube 1"]
+
+    convenience_fixture_index()
+    @test unique(read_cpi(; table=1).cat_no) == ["6401.0"]
+    @test unique(read_awe(; table=1).cat_no) == ["6302.0"]
+    @test unique(read_erp(; table=1).cat_no) == ["3101.0"]
+    @test unique(read_job_mobility(; table=1).cat_no) == ["6226.0"]
+    @test unique(read_payrolls(; table=1).cat_no) == ["6160.0.55.001"]
+    @test read_cpi(; table=1, tidy=false) isa DataFrame
+
+    grossflows = read_lfs_grossflows()
+    @test grossflows isa DataFrame
+    @test unique(grossflows.sheet) == ["Cube 1"]
+    lfs_cube = read_lfs_cube(; cube="detailed")
+    @test lfs_cube isa DataFrame
+    @test unique(lfs_cube.sheet) == ["Cube 1"]
+    error_message = try
+        read_cpi(; table=999)
+        ""
+    catch error
+        sprint(showerror, error)
+    end
+    @test occursin("could not read Consumer Price Index catalogue `6401.0`", error_message)
+    @test occursin("files(\"6401.0\"; refresh=true)", error_message)
 
     info = cache_info()
     @test all(name -> name in names(info), ["kind", "file", "path", "size", "modified"])
