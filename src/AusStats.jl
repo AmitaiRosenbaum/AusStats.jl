@@ -1,6 +1,7 @@
 module AusStats
 
 using Dates
+using CSV
 using DataFrames
 using Downloads
 using EzXML
