@@ -26,7 +26,7 @@ jobs:
         with:
           version: "1.10"
 
-      - uses: julia-actions/cache@v2
+      - uses: julia-actions/cache@v3
 
       - name: Instantiate quality environment
         shell: julia --color=yes --project=quality {0}
