@@ -7,18 +7,23 @@
 [![DOI](https://zenodo.org/badge/1272914246.svg)](https://doi.org/10.5281/zenodo.20771482)
 
 AusStats.jl is a Julia package for finding, downloading, reading, and tidying
-Australian Bureau of Statistics data.
+Australian public statistics, including Australian Bureau of Statistics (ABS)
+and Reserve Bank of Australia (RBA) data.
 
-It is designed for DataFrame-first workflows: discover ABS publications, cache
-downloads, parse time-series workbooks into tidy observations, read data cubes,
-query ABS API endpoints, and keep reproducible local workflows around ABS data.
+It is designed for DataFrame-first workflows: discover provider datasets, cache
+downloads, parse time-series workbooks and RBA CSV/HTML resources into tidy
+observations, read ABS data cubes, query ABS API endpoints, and keep
+reproducible local workflows around Australian data.
 
 ## Why AusStats.jl?
 
 - Work with ABS catalogue numbers, direct URLs, local Excel files, directories,
-  data cubes, and API responses through one package.
+  data cubes, API responses, and RBA table identifiers through one package.
+- Use provider-neutral discovery/reading APIs when code needs to work across
+  ABS, RBA, and future providers.
 - Get tidy `DataFrame` outputs for time-series workbooks, with ABS metadata
-  preserved where available.
+  preserved where available, and tidy RBA outputs for statistical tables and
+  specialised cash-rate/balance-sheet pages.
 - Cache downloaded and parsed data so repeated work is fast and reproducible.
 - Use generic readers for flexible workflows, or convenience readers for common
   publication families.
@@ -36,6 +41,9 @@ files("6202.0")
 df = read_abs("6202.0"; tables=1)
 metadata = read_metadata("6202.0"; tables=1)
 series = read_series("A84423043A"; cat_no="6202.0")
+
+search_rba("cash rate")
+cash = read_rba_cash_rate()
 ```
 
 ## Examples
@@ -62,6 +70,16 @@ cube = read_cube("6202.0"; cube="gross flows")
 
 structure = datastructure("CPI")
 observations = read_api("CPI"; filters=(measure="1",), start_period="2024-Q1")
+```
+
+Use provider-neutral APIs when you want code that can target more than one
+source:
+
+```julia
+providers()
+search_data("interest rates"; provider=:rba)
+rba = read_data(:rba, "F1")
+abs = read_data(:abs, "6202.0"; file=1)
 ```
 
 Use convenience readers for common publication families:

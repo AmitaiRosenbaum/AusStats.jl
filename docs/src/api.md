@@ -5,23 +5,33 @@ This page documents the full public API for AusStats.jl.
 ## Discovery
 
 ```@docs
+providers
+datasets
+datafiles
+search_data
 search_abs
 catalogues
 files
 releases
 refresh_abs!
+search_rba
+rba_tables
+rba_files
 ```
 
 ## Downloading
 
 ```@docs
+download_data
 download_abs
 download_cube
+download_rba
 ```
 
 ## Reading
 
 ```@docs
+read_data
 read_abs
 read_abs_local
 read_abs_url
@@ -33,6 +43,9 @@ latest_date
 search_cubes
 cube_files
 read_cube
+read_rba
+read_rba_cash_rate
+read_rba_balance_sheet
 ```
 
 ## Convenience Readers
