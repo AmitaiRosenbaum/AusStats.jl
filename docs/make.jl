@@ -31,4 +31,8 @@ makedocs(;
     checkdocs=:exports,
 )
 
-deploydocs(; repo="github.com/AmitaiRosenbaum/AusStats.jl.git", devbranch="main")
+deploydocs(;
+    repo="github.com/AmitaiRosenbaum/AusStats.jl.git",
+    devbranch="main",
+    versions=["stable" => "v^", "v#.#", "dev" => "dev"],
+)
