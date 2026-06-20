@@ -8,22 +8,25 @@
 
 AusStats.jl is a Julia package for finding, downloading, reading, and tidying
 Australian public statistics, including Australian Bureau of Statistics (ABS)
-and Reserve Bank of Australia (RBA) data.
+Reserve Bank of Australia (RBA), and Australian Prudential Regulation Authority
+(APRA) data.
 
 It is designed for DataFrame-first workflows: discover provider datasets, cache
-downloads, parse time-series workbooks and RBA CSV/HTML resources into tidy
+downloads, parse time-series workbooks and RBA/APRA CSV/HTML resources into tidy
 observations, read ABS data cubes, query ABS API endpoints, and keep
 reproducible local workflows around Australian data.
 
 ## Why AusStats.jl?
 
 - Work with ABS catalogue numbers, direct URLs, local Excel files, directories,
-  data cubes, API responses, and RBA table identifiers through one package.
+  data cubes, API responses, RBA table identifiers, and APRA publication
+  identifiers through one package.
 - Use provider-neutral discovery/reading APIs when code needs to work across
-  ABS, RBA, and future providers.
+  ABS, RBA, APRA, and future providers.
 - Get tidy `DataFrame` outputs for time-series workbooks, with ABS metadata
   preserved where available, and tidy RBA outputs for statistical tables and
-  specialised cash-rate/balance-sheet pages.
+  specialised cash-rate/balance-sheet pages, plus APRA workbook-style
+  publication outputs with provenance.
 - Cache downloaded and parsed data so repeated work is fast and reproducible.
 - Use generic readers for flexible workflows, or convenience readers for common
   publication families.
@@ -44,6 +47,9 @@ series = read_series("A84423043A"; cat_no="6202.0")
 
 search_rba("cash rate")
 cash = read_rba_cash_rate()
+
+search_apra("deposit-taking")
+apra = read_apra("monthly-authorised-deposit-taking-institution-statistics")
 ```
 
 ## Examples
@@ -78,7 +84,9 @@ source:
 ```julia
 providers()
 search_data("interest rates"; provider=:rba)
+search_data("superannuation"; provider=:apra)
 rba = read_data(:rba, "F1")
+apra = read_data(:apra, "quarterly-authorised-deposit-taking-institution-statistics")
 abs = read_data(:abs, "6202.0"; file=1)
 ```
 

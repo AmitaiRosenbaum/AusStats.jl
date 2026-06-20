@@ -4,11 +4,12 @@
 
 AusStats.jl is a Julia package for finding, downloading, reading, and tidying
 Australian public statistics, including Australian Bureau of Statistics (ABS)
-and Reserve Bank of Australia (RBA) data.
+Reserve Bank of Australia (RBA), and Australian Prudential Regulation Authority
+(APRA) data.
 
 It is designed around ordinary Julia workflows: functions return `DataFrame`s,
 provider discovery is explicit, downloads are cached, and ABS/RBA time-series
-resources are reshaped into tidy long-format observations.
+and APRA resources are reshaped into analysis-friendly `DataFrame`s.
 
 The package has four main layers:
 
@@ -35,6 +36,10 @@ series = read_series("A84423043A"; cat_no="6202.0")
 search_rba("cash")
 
 cash = read_rba_cash_rate()
+
+search_apra("deposit-taking")
+
+apra = read_apra("monthly-authorised-deposit-taking-institution-statistics")
 ```
 
 ## What The Package Covers
@@ -52,6 +57,7 @@ cash = read_rba_cash_rate()
 - Convenience readers for common ABS families.
 - Provider-neutral APIs for code that should target ABS, RBA, and future providers.
 - RBA statistical tables, cash-rate target data, and balance-sheet summary data.
+- APRA statistical publication discovery, downloads, and workbook-style reads.
 
 ## Output Style
 

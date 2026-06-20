@@ -14,6 +14,9 @@ catalogues
 files
 releases
 refresh_abs!
+search_apra
+apra_publications
+apra_files
 search_rba
 rba_tables
 rba_files
@@ -25,6 +28,7 @@ rba_files
 download_data
 download_abs
 download_cube
+download_apra
 download_rba
 ```
 
@@ -43,6 +47,7 @@ latest_date
 search_cubes
 cube_files
 read_cube
+read_apra
 read_rba
 read_rba_cash_rate
 read_rba_balance_sheet
