@@ -1,4 +1,7 @@
 @testset "APRA provider API" begin
+    apra_index_path = AusStats._apra_index_path()
+    isfile(apra_index_path) && rm(apra_index_path)
+
     provider_rows = providers()
     @test :apra in provider_rows.provider
     @test nrow(apra_publications()) >= 2
