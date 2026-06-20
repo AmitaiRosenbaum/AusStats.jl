@@ -1,5 +1,7 @@
 # AusStats.jl
 
+**Author: Amitai Rosenbaum (@AmitaiRosenbaum)**
+
 AusStats.jl is a Julia package for finding, downloading, reading, and tidying Australian Bureau of Statistics data.
 
 It is designed around ordinary Julia workflows: functions return `DataFrame`s,

@@ -1,6 +1,6 @@
 name = "AusStats"
 uuid = "3536d050-4194-456c-ba29-fa42cdc0b627"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Amitai Rosenbaum"]
 
 [deps]
