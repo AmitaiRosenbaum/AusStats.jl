@@ -1,6 +1,6 @@
 @testset "Provider API" begin
     provider_rows = providers()
-    @test Set(provider_rows.provider) == Set([:abs, :rba])
+    @test Set(provider_rows.provider) == Set([:abs, :apra, :rba])
     @test nrow(datasets(:abs)) >= 1
     @test nrow(datafiles(:abs, "6202.0")) >= 1
     @test nrow(search_data("labour"; provider=:abs)) >= 1
