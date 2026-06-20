@@ -1,6 +1,13 @@
 const PARSED_CACHE_VERSION = "1"
 
-function _with_parsed_cache(f::Function, path::AbstractString; kind::Symbol, options, cache_parsed::Bool, refresh::Bool)
+function _with_parsed_cache(
+    f::Function,
+    path::AbstractString;
+    kind::Symbol,
+    options,
+    cache_parsed::Bool,
+    refresh::Bool,
+)
     cache_parsed || return f()
 
     key = _parsed_cache_key(path; kind=kind, options=options)
@@ -20,15 +27,18 @@ end
 
 function _parsed_cache_key(path::AbstractString; kind::Symbol, options)
     metadata = _parsed_cache_metadata(path; kind=kind, options=options)
-    text = join((
-        metadata.source_path,
-        metadata.source_size,
-        metadata.source_mtime,
-        metadata.parser_version,
-        metadata.package_version,
-        metadata.kind,
-        metadata.options,
-    ), "\n")
+    text = join(
+        (
+            metadata.source_path,
+            metadata.source_size,
+            metadata.source_mtime,
+            metadata.parser_version,
+            metadata.package_version,
+            metadata.kind,
+            metadata.options,
+        ),
+        "\n",
+    )
     return bytes2hex(sha1(collect(codeunits(text))))
 end
 
@@ -39,13 +49,13 @@ end
 function _parsed_cache_metadata(path::AbstractString; kind::Symbol, options)
     source = abspath(path)
     return (
-        source_path = source,
-        source_size = filesize(source),
-        source_mtime = _source_mtime_ns(source),
-        parser_version = PARSED_CACHE_VERSION,
-        package_version = _package_version(),
-        kind = String(kind),
-        options = repr(options),
+        source_path=source,
+        source_size=filesize(source),
+        source_mtime=_source_mtime_ns(source),
+        parser_version=PARSED_CACHE_VERSION,
+        package_version=_package_version(),
+        kind=String(kind),
+        options=repr(options),
     )
 end
 

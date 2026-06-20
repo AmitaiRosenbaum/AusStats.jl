@@ -5,7 +5,7 @@ function _selected_sheets(xf, sheets)
     return collect(sheets)
 end
 
-function _read_sheet(sheet; header_row::Union{Int,Nothing}=nothing)
+function _read_sheet(sheet; header_row::Union{Int, Nothing}=nothing)
     rows = _sheet_rows(sheet)
     isempty(rows) && return DataFrame()
 
@@ -26,7 +26,10 @@ end
 function _sheet_rows(sheet)
     data = XLSX.getdata(sheet)
     isempty(data) && return Vector{Vector{Any}}()
-    return [Any[_cell_value(data[row, column]) for column in axes(data, 2)] for row in axes(data, 1)]
+    return [
+        Any[_cell_value(data[row, column]) for column in axes(data, 2)] for
+        row in axes(data, 1)
+    ]
 end
 
 function _cell_value(value)
@@ -43,7 +46,7 @@ end
 
 function _column_names(row)
     names = String[]
-    seen = Dict{String,Int}()
+    seen = Dict{String, Int}()
 
     for (index, value) in enumerate(row)
         base = if ismissing(value) || isempty(strip(string(value)))
@@ -82,19 +85,37 @@ end
 
 Parse an ABS Excel time-series workbook into a tidy `DataFrame`.
 """
-function tidy_abs(path::AbstractString; metadata::Bool=true, cat_no=missing, release_date=missing, cache_parsed::Bool=false, refresh::Bool=false)
+function tidy_abs(
+    path::AbstractString;
+    metadata::Bool=true,
+    cat_no=missing,
+    release_date=missing,
+    cache_parsed::Bool=false,
+    refresh::Bool=false,
+)
     options = (metadata=metadata, cat_no=cat_no, release_date=release_date)
-    return _with_parsed_cache(path; kind=:tidy_abs, options=options, cache_parsed=cache_parsed, refresh=refresh) do
+    return _with_parsed_cache(
+        path; kind=:tidy_abs, options=options, cache_parsed=cache_parsed, refresh=refresh
+    ) do
         _parse_tidy_abs(path; metadata=metadata, cat_no=cat_no, release_date=release_date)
     end
 end
 
-function _parse_tidy_abs(path::AbstractString; metadata::Bool=true, cat_no=missing, release_date=missing)
+function _parse_tidy_abs(
+    path::AbstractString; metadata::Bool=true, cat_no=missing, release_date=missing
+)
     out = _empty_tidy_abs()
 
     XLSX.openxlsx(path) do xf
         for (sheet_index, sheetname) in enumerate(XLSX.sheetnames(xf))
-            sheet_rows = _tidy_sheet(xf[sheetname], sheetname; metadata=metadata, cat_no=cat_no, release_date=release_date, sheet_index=sheet_index)
+            sheet_rows = _tidy_sheet(
+                xf[sheetname],
+                sheetname;
+                metadata=metadata,
+                cat_no=cat_no,
+                release_date=release_date,
+                sheet_index=sheet_index,
+            )
             isempty(sheet_rows) || append!(out, sheet_rows)
         end
     end
@@ -103,49 +124,56 @@ function _parse_tidy_abs(path::AbstractString; metadata::Bool=true, cat_no=missi
 end
 
 function _empty_tidy_abs()
-    return DataFrame(
-        cat_no = Union{Missing,String}[],
-        release_date = Union{Missing,String}[],
-        table = String[],
-        table_no = Union{Missing,String}[],
-        table_title = Union{Missing,String}[],
-        sheet = String[],
-        sheet_no = Int[],
-        date = Date[],
-        series_id = String[],
-        value = Union{Missing,Float64}[],
-        unit = Union{Missing,String}[],
-        series_type = Union{Missing,String}[],
-        data_type = Union{Missing,String}[],
-        frequency = Union{Missing,String}[],
-        collection_month = Union{Missing,String}[],
-        series_start = Union{Missing,String}[],
-        series = Union{Missing,String}[],
+    return DataFrame(;
+        cat_no=Union{Missing, String}[],
+        release_date=Union{Missing, String}[],
+        table=String[],
+        table_no=Union{Missing, String}[],
+        table_title=Union{Missing, String}[],
+        sheet=String[],
+        sheet_no=Int[],
+        date=Date[],
+        series_id=String[],
+        value=Union{Missing, Float64}[],
+        unit=Union{Missing, String}[],
+        series_type=Union{Missing, String}[],
+        data_type=Union{Missing, String}[],
+        frequency=Union{Missing, String}[],
+        collection_month=Union{Missing, String}[],
+        series_start=Union{Missing, String}[],
+        series=Union{Missing, String}[],
     )
 end
 
 function _empty_abs_metadata()
-    return DataFrame(
-        cat_no = Union{Missing,String}[],
-        release_date = Union{Missing,String}[],
-        table = String[],
-        table_no = Union{Missing,String}[],
-        table_title = Union{Missing,String}[],
-        sheet = String[],
-        sheet_no = Int[],
-        series_id = String[],
-        unit = Union{Missing,String}[],
-        series_type = Union{Missing,String}[],
-        data_type = Union{Missing,String}[],
-        frequency = Union{Missing,String}[],
-        collection_month = Union{Missing,String}[],
-        series_start = Union{Missing,String}[],
-        series = Union{Missing,String}[],
-        source_workbook = String[],
+    return DataFrame(;
+        cat_no=Union{Missing, String}[],
+        release_date=Union{Missing, String}[],
+        table=String[],
+        table_no=Union{Missing, String}[],
+        table_title=Union{Missing, String}[],
+        sheet=String[],
+        sheet_no=Int[],
+        series_id=String[],
+        unit=Union{Missing, String}[],
+        series_type=Union{Missing, String}[],
+        data_type=Union{Missing, String}[],
+        frequency=Union{Missing, String}[],
+        collection_month=Union{Missing, String}[],
+        series_start=Union{Missing, String}[],
+        series=Union{Missing, String}[],
+        source_workbook=String[],
     )
 end
 
-function _metadata_sheet(sheet, sheetname::AbstractString; cat_no=missing, release_date=missing, sheet_index::Int=1, source_workbook::AbstractString="")
+function _metadata_sheet(
+    sheet,
+    sheetname::AbstractString;
+    cat_no=missing,
+    release_date=missing,
+    sheet_index::Int=1,
+    source_workbook::AbstractString="",
+)
     rows = _sheet_rows(sheet)
     isempty(rows) && return _empty_abs_metadata()
     all(_row_is_empty, rows) && return _empty_abs_metadata()
@@ -156,7 +184,13 @@ function _metadata_sheet(sheet, sheetname::AbstractString; cat_no=missing, relea
         isempty(metadata_only) || return metadata_only
     end
 
-    tidy = _tidy_sheet(sheet, sheetname; cat_no=context.cat_no, release_date=context.release_date, sheet_index)
+    tidy = _tidy_sheet(
+        sheet,
+        sheetname;
+        cat_no=context.cat_no,
+        release_date=context.release_date,
+        sheet_index,
+    )
     if !isempty(tidy)
         metadata = unique(select(tidy, Not([:date, :value])))
         metadata[!, :source_workbook] = fill(source_workbook, nrow(metadata))
@@ -182,35 +216,49 @@ function _metadata_only_time_down(rows, context, source_workbook::AbstractString
         unit = _metadata_for_column(rows, col, labels, _unit_labels())
         series_type = _metadata_for_column(rows, col, labels, _series_type_labels())
         data_type = _metadata_for_column(rows, col, labels, _data_type_labels())
-        frequency = _normalise_frequency(_metadata_for_column(rows, col, labels, _frequency_labels()))
-        collection_month = _metadata_for_column(rows, col, labels, _collection_month_labels())
+        frequency = _normalise_frequency(
+            _metadata_for_column(rows, col, labels, _frequency_labels())
+        )
+        collection_month = _metadata_for_column(
+            rows, col, labels, _collection_month_labels()
+        )
         series_start = _metadata_for_column(rows, col, labels, _series_start_labels())
         ismissing(series) && (series = _series_column_name(col))
 
-        push!(out, (
-            context.cat_no,
-            context.release_date,
-            context.table,
-            context.table_no,
-            context.table_title,
-            context.sheet,
-            context.sheet_no,
-            series_id,
-            unit,
-            series_type,
-            data_type,
-            frequency,
-            collection_month,
-            series_start,
-            series,
-            source_workbook,
-        ))
+        push!(
+            out,
+            (
+                context.cat_no,
+                context.release_date,
+                context.table,
+                context.table_no,
+                context.table_title,
+                context.sheet,
+                context.sheet_no,
+                series_id,
+                unit,
+                series_type,
+                data_type,
+                frequency,
+                collection_month,
+                series_start,
+                series,
+                source_workbook,
+            ),
+        )
     end
 
     return out
 end
 
-function _tidy_sheet(sheet, sheetname::AbstractString; metadata::Bool=true, cat_no=missing, release_date=missing, sheet_index::Int=1)
+function _tidy_sheet(
+    sheet,
+    sheetname::AbstractString;
+    metadata::Bool=true,
+    cat_no=missing,
+    release_date=missing,
+    sheet_index::Int=1,
+)
     rows = _sheet_rows(sheet)
     isempty(rows) && return _empty_tidy_abs()
     all(_row_is_empty, rows) && return _empty_tidy_abs()
@@ -223,7 +271,12 @@ function _tidy_sheet(sheet, sheetname::AbstractString; metadata::Bool=true, cat_
     return _tidy_sheet_time_across(rows, sheetname; metadata, context)
 end
 
-function _tidy_sheet_time_down(rows, sheetname::AbstractString; metadata::Bool=true, context=_sheet_context(sheetname, 1, missing, missing))
+function _tidy_sheet_time_down(
+    rows,
+    sheetname::AbstractString;
+    metadata::Bool=true,
+    context=_sheet_context(sheetname, 1, missing, missing),
+)
     date_col = 1
     date_rows = _date_rows_in_column(rows, date_col)
     if isempty(date_rows)
@@ -239,14 +292,39 @@ function _tidy_sheet_time_down(rows, sheetname::AbstractString; metadata::Bool=t
 
     for col in series_cols
         series_id = _series_id_for_column(rows, col, first_date_row, labels)
-        series = metadata ? _series_name_for_column(rows, col, first_date_row, labels) : missing
+        series =
+            metadata ? _series_name_for_column(rows, col, first_date_row, labels) : missing
         unit = metadata ? _metadata_for_column(rows, col, labels, _unit_labels()) : missing
-        series_type = metadata ? _metadata_for_column(rows, col, labels, _series_type_labels()) : missing
-        data_type = metadata ? _metadata_for_column(rows, col, labels, _data_type_labels()) : missing
-        frequency = metadata ? _normalise_frequency(_metadata_for_column(rows, col, labels, _frequency_labels())) : "unknown"
-        collection_month = metadata ? _metadata_for_column(rows, col, labels, _collection_month_labels()) : missing
-        series_start = metadata ? _metadata_for_column(rows, col, labels, _series_start_labels()) : missing
-        frequency == "unknown" && (frequency = _infer_frequency([rows[row_index][date_col] for row_index in date_rows]))
+        series_type = if metadata
+            _metadata_for_column(rows, col, labels, _series_type_labels())
+        else
+            missing
+        end
+        data_type = if metadata
+            _metadata_for_column(rows, col, labels, _data_type_labels())
+        else
+            missing
+        end
+        frequency = if metadata
+            _normalise_frequency(_metadata_for_column(rows, col, labels, _frequency_labels()))
+        else
+            "unknown"
+        end
+        collection_month = if metadata
+            _metadata_for_column(rows, col, labels, _collection_month_labels())
+        else
+            missing
+        end
+        series_start = if metadata
+            _metadata_for_column(rows, col, labels, _series_start_labels())
+        else
+            missing
+        end
+        frequency == "unknown" && (
+            frequency = _infer_frequency([
+                rows[row_index][date_col] for row_index in date_rows
+            ])
+        )
         ismissing(series) && (series = _series_column_name(col))
 
         for row_index in date_rows
@@ -255,32 +333,40 @@ function _tidy_sheet_time_down(rows, sheetname::AbstractString; metadata::Bool=t
 
             value = _parse_abs_float(get(rows[row_index], col, missing))
 
-            push!(out, (
-                context.cat_no,
-                context.release_date,
-                context.table,
-                context.table_no,
-                context.table_title,
-                context.sheet,
-                context.sheet_no,
-                date,
-                series_id,
-                value,
-                unit,
-                series_type,
-                data_type,
-                frequency,
-                collection_month,
-                series_start,
-                series,
-            ))
+            push!(
+                out,
+                (
+                    context.cat_no,
+                    context.release_date,
+                    context.table,
+                    context.table_no,
+                    context.table_title,
+                    context.sheet,
+                    context.sheet_no,
+                    date,
+                    series_id,
+                    value,
+                    unit,
+                    series_type,
+                    data_type,
+                    frequency,
+                    collection_month,
+                    series_start,
+                    series,
+                ),
+            )
         end
     end
 
     return out
 end
 
-function _tidy_sheet_time_across(rows, sheetname::AbstractString; metadata::Bool=true, context=_sheet_context(sheetname, 1, missing, missing))
+function _tidy_sheet_time_across(
+    rows,
+    sheetname::AbstractString;
+    metadata::Bool=true,
+    context=_sheet_context(sheetname, 1, missing, missing),
+)
     header_row, date_cols = _best_date_header_row(rows)
     if header_row === nothing || isempty(date_cols)
         return _empty_tidy_abs()
@@ -296,12 +382,33 @@ function _tidy_sheet_time_across(rows, sheetname::AbstractString; metadata::Bool
 
         series = metadata ? _series_name_for_row(row, rows[header_row]) : missing
         unit = metadata ? _metadata_for_row(row, rows[header_row], _unit_labels()) : missing
-        series_type = metadata ? _metadata_for_row(row, rows[header_row], _series_type_labels()) : missing
-        data_type = metadata ? _metadata_for_row(row, rows[header_row], _data_type_labels()) : missing
-        frequency = metadata ? _normalise_frequency(_metadata_for_row(row, rows[header_row], _frequency_labels())) : "unknown"
-        collection_month = metadata ? _metadata_for_row(row, rows[header_row], _collection_month_labels()) : missing
-        series_start = metadata ? _metadata_for_row(row, rows[header_row], _series_start_labels()) : missing
-        frequency == "unknown" && (frequency = _infer_frequency([rows[header_row][col] for col in date_cols]))
+        series_type = if metadata
+            _metadata_for_row(row, rows[header_row], _series_type_labels())
+        else
+            missing
+        end
+        data_type = if metadata
+            _metadata_for_row(row, rows[header_row], _data_type_labels())
+        else
+            missing
+        end
+        frequency = if metadata
+            _normalise_frequency(_metadata_for_row(row, rows[header_row], _frequency_labels()))
+        else
+            "unknown"
+        end
+        collection_month = if metadata
+            _metadata_for_row(row, rows[header_row], _collection_month_labels())
+        else
+            missing
+        end
+        series_start = if metadata
+            _metadata_for_row(row, rows[header_row], _series_start_labels())
+        else
+            missing
+        end
+        frequency == "unknown" &&
+            (frequency = _infer_frequency([rows[header_row][col] for col in date_cols]))
         ismissing(series) && (series = _clean_text(isempty(row) ? missing : first(row)))
 
         for col in date_cols
@@ -310,25 +417,28 @@ function _tidy_sheet_time_across(rows, sheetname::AbstractString; metadata::Bool
 
             value = _parse_abs_float(get(row, col, missing))
 
-            push!(out, (
-                context.cat_no,
-                context.release_date,
-                context.table,
-                context.table_no,
-                context.table_title,
-                context.sheet,
-                context.sheet_no,
-                date,
-                series_id,
-                value,
-                unit,
-                series_type,
-                data_type,
-                frequency,
-                collection_month,
-                series_start,
-                series,
-            ))
+            push!(
+                out,
+                (
+                    context.cat_no,
+                    context.release_date,
+                    context.table,
+                    context.table_no,
+                    context.table_title,
+                    context.sheet,
+                    context.sheet_no,
+                    date,
+                    series_id,
+                    value,
+                    unit,
+                    series_type,
+                    data_type,
+                    frequency,
+                    collection_month,
+                    series_start,
+                    series,
+                ),
+            )
         end
     end
 
@@ -401,7 +511,7 @@ function _column_has_content(rows, col::Int)
 end
 
 function _metadata_labels(rows, first_date_row::Int, date_col::Int)
-    labels = Dict{String,Int}()
+    labels = Dict{String, Int}()
     for row_index in 1:(first_date_row - 1)
         label = _metadata_label(get(rows[row_index], date_col, missing))
         isempty(label) || (labels[label] = row_index)
@@ -471,7 +581,10 @@ function _series_name_for_row(row, header)
 
     for value in row
         text = _clean_text(value)
-        if !isempty(text) && !_looks_like_abs_series_id(text) && _parse_abs_date(text) === nothing && ismissing(_parse_abs_float(text))
+        if !isempty(text) &&
+            !_looks_like_abs_series_id(text) &&
+            _parse_abs_date(text) === nothing &&
+            ismissing(_parse_abs_float(text))
             return text
         end
     end
@@ -507,7 +620,9 @@ function _parse_abs_period(value)
     if year_month !== nothing
         month = parse(Int, year_month.captures[2])
         1 <= month <= 12 || return nothing
-        return (date=Date(parse(Int, year_month.captures[1]), month, 1), frequency="monthly")
+        return (
+            date=Date(parse(Int, year_month.captures[1]), month, 1), frequency="monthly"
+        )
     end
 
     quarter = match(r"^([0-9]{4})[- ]?Q([1-4])$"i, text)
@@ -531,7 +646,13 @@ function _parse_abs_period(value)
         return (date=Date(year, month, 1), frequency="unknown")
     end
 
-    for format in (dateformat"yyyy-mm-dd", dateformat"dd/mm/yyyy", dateformat"m/d/yyyy", dateformat"u yyyy", dateformat"U yyyy")
+    for format in (
+        dateformat"yyyy-mm-dd",
+        dateformat"dd/mm/yyyy",
+        dateformat"m/d/yyyy",
+        dateformat"u yyyy",
+        dateformat"U yyyy",
+    )
         parsed = tryparse(Date, text, format)
         parsed === nothing || return (date=parsed, frequency="unknown")
     end
@@ -559,7 +680,20 @@ function _parse_abs_year(text::AbstractString)
 end
 
 function _month_number(month::AbstractString)
-    months = Dict("jan" => 1, "feb" => 2, "mar" => 3, "apr" => 4, "may" => 5, "jun" => 6, "jul" => 7, "aug" => 8, "sep" => 9, "oct" => 10, "nov" => 11, "dec" => 12)
+    months = Dict(
+        "jan" => 1,
+        "feb" => 2,
+        "mar" => 3,
+        "apr" => 4,
+        "may" => 5,
+        "jun" => 6,
+        "jul" => 7,
+        "aug" => 8,
+        "sep" => 9,
+        "oct" => 10,
+        "nov" => 11,
+        "dec" => 12,
+    )
     return months[lowercase(month[1:3])]
 end
 
@@ -583,12 +717,17 @@ function _infer_frequency(values)
     isempty(clean_periods) && return "unknown"
 
     known = [period.frequency for period in clean_periods if period.frequency != "unknown"]
-    !isempty(known) && all(frequency -> frequency == first(known), known) && return first(known)
+    !isempty(known) &&
+        all(frequency -> frequency == first(known), known) &&
+        return first(known)
 
     clean_dates = sort([period.date for period in clean_periods])
     length(clean_dates) < 2 && return "unknown"
 
-    months = [_month_delta(clean_dates[index], clean_dates[index + 1]) for index in 1:(length(clean_dates) - 1)]
+    months = [
+        _month_delta(clean_dates[index], clean_dates[index + 1]) for
+        index in 1:(length(clean_dates) - 1)
+    ]
     isempty(months) && return "unknown"
 
     median_months = sort(months)[cld(length(months), 2)]
@@ -623,8 +762,12 @@ function _normalise_frequency(value)
     startswith(text, "year") && return "annual"
     startswith(text, "week") && return "weekly"
     startswith(text, "fortnight") && return "fortnightly"
-    (startswith(text, "biannual") || startswith(text, "semiannual") || startswith(text, "half-year")) && return "semiannual"
-    startswith(text, "day") && return "daily"
+    (
+        startswith(text, "biannual") ||
+        startswith(text, "semiannual") ||
+        startswith(text, "half-year")
+    ) && return "semiannual"
+    (startswith(text, "day") || startswith(text, "dail")) && return "daily"
 
     return "unknown"
 end
@@ -640,7 +783,15 @@ _series_id_labels() = ("seriesid", "seriesnumber")
 _series_labels() = ("dataitem", "series", "seriesdescription", "description", "title")
 _unit_labels() = ("unit", "units", "unitofmeasure")
 _frequency_labels() = ("frequency", "freq")
-_series_type_labels() = ("seriestype", "series type", "seasonaladjustment", "seasonaladjustmenttype", "adjustment")
+function _series_type_labels()
+    return (
+        "seriestype",
+        "series type",
+        "seasonaladjustment",
+        "seasonaladjustmenttype",
+        "adjustment",
+    )
+end
 _data_type_labels() = ("datatype", "data type")
 _collection_month_labels() = ("collectionmonth", "collection")
 _series_start_labels() = ("seriesstart", "startdate", "start")
@@ -657,34 +808,46 @@ end
 function _sheet_context(sheetname::AbstractString, sheet_index::Int, cat_no, release_date)
     table_no = something(_table_no(sheetname), missing)
     return (
-        cat_no = _missing_or_string(cat_no),
-        release_date = _missing_or_string(release_date),
-        table = string(sheetname),
-        table_no = table_no,
-        table_title = string(sheetname),
-        sheet = string(sheetname),
-        sheet_no = sheet_index,
+        cat_no=_missing_or_string(cat_no),
+        release_date=_missing_or_string(release_date),
+        table=string(sheetname),
+        table_no=table_no,
+        table_title=string(sheetname),
+        sheet=string(sheetname),
+        sheet_no=sheet_index,
     )
 end
 
-function _sheet_context(rows, sheetname::AbstractString, sheet_index::Int, cat_no, release_date)
+function _sheet_context(
+    rows, sheetname::AbstractString, sheet_index::Int, cat_no, release_date
+)
     table_title = _infer_table_title(rows, sheetname)
     table_no = something(_table_no(table_title), _table_no(sheetname), missing)
     inferred_cat_no = _infer_catalogue_number(rows)
     inferred_release = _infer_release_value(rows)
     return (
-        cat_no = ismissing(_missing_or_string(cat_no)) ? inferred_cat_no : _missing_or_string(cat_no),
-        release_date = ismissing(_missing_or_string(release_date)) ? inferred_release : _missing_or_string(release_date),
-        table = string(sheetname),
-        table_no = table_no,
-        table_title = table_title,
-        sheet = string(sheetname),
-        sheet_no = sheet_index,
+        cat_no=if ismissing(_missing_or_string(cat_no))
+            inferred_cat_no
+        else
+            _missing_or_string(cat_no)
+        end,
+        release_date=if ismissing(_missing_or_string(release_date))
+            inferred_release
+        else
+            _missing_or_string(release_date)
+        end,
+        table=string(sheetname),
+        table_no=table_no,
+        table_title=table_title,
+        sheet=string(sheetname),
+        sheet_no=sheet_index,
     )
 end
 
 function _infer_table_title(rows, sheetname::AbstractString)
-    first_date_row = findfirst(row -> !isempty(row) && _parse_abs_date(first(row)) !== nothing, rows)
+    first_date_row = findfirst(
+        row -> !isempty(row) && _parse_abs_date(first(row)) !== nothing, rows
+    )
     metadata_end = something(first_date_row, length(rows) + 1) - 1
     limit = min(length(rows), metadata_end, 30)
     limit < 1 && return string(sheetname)
@@ -727,7 +890,9 @@ function _infer_catalogue_number(rows)
 
         for value in row
             text = _clean_text(value)
-            m = match(r"(?i)catalogue\s*(?:number|no\.?)?\s*:?\s*([0-9]{4}(?:\.[0-9]+)*)", text)
+            m = match(
+                r"(?i)catalogue\s*(?:number|no\.?)?\s*:?\s*([0-9]{4}(?:\.[0-9]+)*)", text
+            )
             m === nothing || return m.captures[1]
         end
     end
@@ -743,6 +908,7 @@ function _infer_release_value(rows)
                 text = _clean_text(value)
                 isempty(text) || return _normalise_release_text(text)
             end
+            continue
         end
 
         for value in row
@@ -769,16 +935,18 @@ function _first_matching_text(values, pattern)
 end
 
 function _all_metadata_labels()
-    return Set(vcat(
-        collect(_series_id_labels()),
-        collect(_series_labels()),
-        collect(_unit_labels()),
-        collect(_frequency_labels()),
-        collect(_series_type_labels()),
-        collect(_data_type_labels()),
-        collect(_collection_month_labels()),
-        collect(_series_start_labels()),
-    ))
+    return Set(
+        vcat(
+            collect(_series_id_labels()),
+            collect(_series_labels()),
+            collect(_unit_labels()),
+            collect(_frequency_labels()),
+            collect(_series_type_labels()),
+            collect(_data_type_labels()),
+            collect(_collection_month_labels()),
+            collect(_series_start_labels()),
+        ),
+    )
 end
 
 function _missing_or_string(value)

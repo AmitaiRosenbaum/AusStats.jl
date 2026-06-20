@@ -9,15 +9,20 @@ function search_cubes(query::AbstractString; cat_no=nothing, refresh::Bool=false
     isempty(needle) && return cubes
 
     keep = map(eachrow(cubes)) do row
-        haystack = lowercase(join((
-            row.cat_no,
-            row.title,
-            row.description,
-            row.file_title,
-            row.table_title,
-            row.filename,
-            row.url,
-        ), " "))
+        haystack = lowercase(
+            join(
+                (
+                    row.cat_no,
+                    row.title,
+                    row.description,
+                    row.file_title,
+                    row.table_title,
+                    row.filename,
+                    row.url,
+                ),
+                " ",
+            ),
+        )
         occursin(needle, haystack)
     end
 
@@ -33,12 +38,17 @@ for a historical release.
 """
 function cube_files(cat_no=nothing; release=nothing, refresh::Bool=false)
     df = if release isa Date
-        cat_no === nothing && throw(ArgumentError("cat_no is required when release is a Date"))
+        cat_no === nothing &&
+            throw(ArgumentError("cat_no is required when release is a Date"))
         _files_for_release(string(cat_no), release; refresh=refresh, strict=refresh)
     elseif release === nothing
         cat_no === nothing ? files(; refresh=refresh) : files(cat_no; refresh=refresh)
     else
-        all_files = cat_no === nothing ? files(; refresh=refresh) : files(cat_no; refresh=refresh)
+        all_files = if cat_no === nothing
+            files(; refresh=refresh)
+        else
+            files(cat_no; refresh=refresh)
+        end
         release_key = lowercase(strip(string(release)))
         all_files[lowercase.(all_files.release_date) .== release_key, :]
     end
@@ -57,7 +67,15 @@ generic sheet-shaped parser. Use `family=:generic` to force the fallback parser.
 Parsed cube outputs are cached by default and invalidated when the source
 workbook, parser version, package version, or read options change.
 """
-function read_cube(source::AbstractString; cube=nothing, release=:latest, cache::Bool=true, cache_parsed::Bool=true, refresh::Bool=false, family::Symbol=:auto)
+function read_cube(
+    source::AbstractString;
+    cube=nothing,
+    release=:latest,
+    cache::Bool=true,
+    cache_parsed::Bool=true,
+    refresh::Bool=false,
+    family::Symbol=:auto,
+)
     path, metadata = if _is_url(source)
         dest = cache ? _cache_subdir(:cubes) : mktempdir()
         (_download_file(source; dest, force=!cache), _cube_metadata(; url=source))
@@ -66,19 +84,30 @@ function read_cube(source::AbstractString; cube=nothing, release=:latest, cache:
     else
         refresh && files(source; refresh=true)
         row = _select_file(source; file=cube, release=release, cube=true)
-        downloaded = cache ? download_cube(source; cube, release) :
+        downloaded = if cache
+            download_cube(source; cube, release)
+        else
             _download_file(row.url; dest=mktempdir(), filename=row.filename, force=true)
+        end
         (downloaded, _cube_metadata(row))
     end
 
     options = (cube=cube, release=release, family=family, metadata=metadata)
-    return _with_parsed_cache(path; kind=:read_cube, options=options, cache_parsed=cache_parsed, refresh=refresh) do
+    return _with_parsed_cache(
+        path; kind=:read_cube, options=options, cache_parsed=cache_parsed, refresh=refresh
+    ) do
         _read_cube_workbook(path; family=family, metadata=metadata)
     end
 end
 
-function _read_cube_workbook(path::AbstractString; family::Symbol=:auto, metadata=_cube_metadata())
-    family in (:auto, :generic, :labelled_matrix) || throw(ArgumentError("unsupported cube parser family `$family`; expected :auto, :generic, or :labelled_matrix"))
+function _read_cube_workbook(
+    path::AbstractString; family::Symbol=:auto, metadata=_cube_metadata()
+)
+    family in (:auto, :generic, :labelled_matrix) || throw(
+        ArgumentError(
+            "unsupported cube parser family `$family`; expected :auto, :generic, or :labelled_matrix",
+        ),
+    )
     out = DataFrame()
     source_file = abspath(path)
 
@@ -91,8 +120,14 @@ function _read_cube_workbook(path::AbstractString; family::Symbol=:auto, metadat
             elseif family == :labelled_matrix
                 _read_labelled_matrix_cube_sheet(rows, sheetname, source_file, metadata)
             else
-                parsed = _read_labelled_matrix_cube_sheet(rows, sheetname, source_file, metadata)
-                isempty(parsed) ? _read_generic_cube_sheet(rows, sheetname, source_file, metadata) : parsed
+                parsed = _read_labelled_matrix_cube_sheet(
+                    rows, sheetname, source_file, metadata
+                )
+                if isempty(parsed)
+                    _read_generic_cube_sheet(rows, sheetname, source_file, metadata)
+                else
+                    parsed
+                end
             end
             isempty(table) && continue
             if isempty(out)
@@ -106,14 +141,16 @@ function _read_cube_workbook(path::AbstractString; family::Symbol=:auto, metadat
     return out
 end
 
-function _read_generic_cube_sheet(rows, sheetname::AbstractString, source_file::AbstractString, metadata)
+function _read_generic_cube_sheet(
+    rows, sheetname::AbstractString, source_file::AbstractString, metadata
+)
     table = _read_rows_as_sheet(rows)
     isempty(table) && return table
     _add_cube_provenance!(table, sheetname, source_file, metadata)
     return table
 end
 
-function _read_rows_as_sheet(rows; header_row::Union{Int,Nothing}=nothing)
+function _read_rows_as_sheet(rows; header_row::Union{Int, Nothing}=nothing)
     clean_rows = [row for row in rows if !_row_is_empty(row)]
     isempty(clean_rows) && return DataFrame()
 
@@ -131,32 +168,40 @@ function _read_rows_as_sheet(rows; header_row::Union{Int,Nothing}=nothing)
     return table
 end
 
-function _read_labelled_matrix_cube_sheet(rows, sheetname::AbstractString, source_file::AbstractString, metadata)
+function _read_labelled_matrix_cube_sheet(
+    rows, sheetname::AbstractString, source_file::AbstractString, metadata
+)
     header_row = _cube_matrix_header_row(rows)
     header_row === nothing && return DataFrame()
 
     header = rows[header_row]
-    period_cols = [index for (index, value) in enumerate(header) if _parse_abs_period(value) !== nothing]
+    period_cols = [
+        index for
+        (index, value) in enumerate(header) if _parse_abs_period(value) !== nothing
+    ]
     isempty(period_cols) && return DataFrame()
 
     first_period_col = minimum(period_cols)
-    dimension_cols = [index for index in 1:(first_period_col - 1) if !_empty_series_value(get(header, index, missing))]
+    dimension_cols = [
+        index for index in 1:(first_period_col - 1) if
+        !_empty_series_value(get(header, index, missing))
+    ]
     isempty(dimension_cols) && return DataFrame()
 
     dimension_names = _cube_dimension_names(header, dimension_cols)
-    out = DataFrame(
-        source_file = String[],
-        cat_no = Union{Missing,String}[],
-        release_date = Union{Missing,String}[],
-        cube = Union{Missing,String}[],
-        cube_title = Union{Missing,String}[],
-        sheet = String[],
-        date = Date[],
-        frequency = String[],
-        value = Union{Missing,Float64}[],
+    out = DataFrame(;
+        source_file=String[],
+        cat_no=Union{Missing, String}[],
+        release_date=Union{Missing, String}[],
+        cube=Union{Missing, String}[],
+        cube_title=Union{Missing, String}[],
+        sheet=String[],
+        date=Date[],
+        frequency=String[],
+        value=Union{Missing, Float64}[],
     )
     for name in dimension_names
-        out[!, name] = Union{Missing,String}[]
+        out[!, name] = Union{Missing, String}[]
     end
 
     for row in rows[(header_row + 1):end]
@@ -191,11 +236,15 @@ end
 
 function _cube_matrix_header_row(rows)
     for (index, row) in enumerate(rows)
-        period_cols = [col for (col, value) in enumerate(row) if _parse_abs_period(value) !== nothing]
+        period_cols = [
+            col for (col, value) in enumerate(row) if _parse_abs_period(value) !== nothing
+        ]
         isempty(period_cols) && continue
         first_period_col = minimum(period_cols)
         first_period_col > 1 || continue
-        dimension_labels = count(col -> !_empty_series_value(get(row, col, missing)), 1:(first_period_col - 1))
+        dimension_labels = count(
+            col -> !_empty_series_value(get(row, col, missing)), 1:(first_period_col - 1)
+        )
         dimension_labels > 0 || continue
         return index
     end
@@ -206,10 +255,14 @@ end
 function _cube_dimension_names(header, dimension_cols)
     raw_names = [_clean_text(get(header, col, missing)) for col in dimension_cols]
     names = Symbol[]
-    seen = Dict{Symbol,Int}()
+    seen = Dict{Symbol, Int}()
 
     for (index, raw_name) in enumerate(raw_names)
-        base = isempty(raw_name) ? Symbol("dimension_$index") : Symbol(_normalise_name(raw_name))
+        base = if isempty(raw_name)
+            Symbol("dimension_$index")
+        else
+            Symbol(_normalise_name(raw_name))
+        end
         count = get(seen, base, 0) + 1
         seen[base] = count
         push!(names, count == 1 ? base : Symbol("$(base)_$count"))
@@ -219,14 +272,18 @@ function _cube_dimension_names(header, dimension_cols)
 end
 
 function _cube_footer_row(row)
-    text = lowercase(strip(join((_clean_text(value) for value in row if !_empty_series_value(value)), " ")))
+    text = lowercase(
+        strip(
+            join((_clean_text(value) for value in row if !_empty_series_value(value)), " ")
+        ),
+    )
     isempty(text) && return false
     return startswith(text, "note") ||
-        startswith(text, "source") ||
-        startswith(text, "footnote") ||
-        startswith(text, "comments") ||
-        startswith(text, "©") ||
-        occursin("cells in this table", text)
+           startswith(text, "source") ||
+           startswith(text, "footnote") ||
+           startswith(text, "comments") ||
+           startswith(text, "©") ||
+           occursin("cells in this table", text)
 end
 
 function _cube_notes_sheet(sheetname::AbstractString, rows)
@@ -236,7 +293,14 @@ function _cube_notes_sheet(sheetname::AbstractString, rows)
     occursin("cover", name) && return true
 
     for row in rows[1:min(length(rows), 3)]
-        text = lowercase(strip(join((_clean_text(value) for value in row if !_empty_series_value(value)), " ")))
+        text = lowercase(
+            strip(
+                join(
+                    (_clean_text(value) for value in row if !_empty_series_value(value)),
+                    " ",
+                ),
+            ),
+        )
         isempty(text) && continue
         startswith(text, "note") && return true
         startswith(text, "explanatory") && return true
@@ -245,26 +309,34 @@ function _cube_notes_sheet(sheetname::AbstractString, rows)
     return false
 end
 
-function _cube_metadata(; cat_no=missing, release_date=missing, cube=missing, cube_title=missing, url=missing)
-    title = ismissing(cube_title) && !ismissing(url) ? basename(split(string(url), "?")[1]) : cube_title
+function _cube_metadata(;
+    cat_no=missing, release_date=missing, cube=missing, cube_title=missing, url=missing
+)
+    title = if ismissing(cube_title) && !ismissing(url)
+        basename(split(string(url), "?")[1])
+    else
+        cube_title
+    end
     return (
-        cat_no = _missing_or_string(cat_no),
-        release_date = _missing_or_string(release_date),
-        cube = _missing_or_string(cube),
-        cube_title = _missing_or_string(title),
+        cat_no=_missing_or_string(cat_no),
+        release_date=_missing_or_string(release_date),
+        cube=_missing_or_string(cube),
+        cube_title=_missing_or_string(title),
     )
 end
 
 function _cube_metadata(row::DataFrameRow)
     return _cube_metadata(;
-        cat_no = row.cat_no,
-        release_date = row.release_date,
-        cube = row.filename,
-        cube_title = row.file_title,
+        cat_no=row.cat_no,
+        release_date=row.release_date,
+        cube=row.filename,
+        cube_title=row.file_title,
     )
 end
 
-function _add_cube_provenance!(table::DataFrame, sheetname::AbstractString, source_file::AbstractString, metadata)
+function _add_cube_provenance!(
+    table::DataFrame, sheetname::AbstractString, source_file::AbstractString, metadata
+)
     table[!, :source_file] = fill(source_file, nrow(table))
     table[!, :cat_no] = fill(metadata.cat_no, nrow(table))
     table[!, :release_date] = fill(metadata.release_date, nrow(table))

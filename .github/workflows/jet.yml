@@ -1,0 +1,39 @@
+name: JET
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jet-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  jet:
+    name: JET.jl
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.10"
+
+      - uses: julia-actions/cache@v2
+
+      - name: Instantiate quality environment
+        shell: julia --color=yes --project=quality {0}
+        run: |
+          using Pkg
+          Pkg.develop(PackageSpec(path=pwd()))
+          Pkg.instantiate()
+
+      - name: Run JET.jl
+        run: julia --color=yes --project=quality quality/jet.jl
