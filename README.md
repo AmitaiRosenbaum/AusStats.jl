@@ -4,9 +4,7 @@
 [![Development documentation](https://img.shields.io/badge/docs-dev-blue.svg)](https://AmitaiRosenbaum.github.io/AusStats.jl/dev)
 [![codecov](https://codecov.io/gh/AmitaiRosenbaum/AusStats.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/AmitaiRosenbaum/AusStats.jl)
 [![CI](https://github.com/AmitaiRosenbaum/AusStats.jl/actions/workflows/ci.yml/badge.svg)](https://github.com/AmitaiRosenbaum/AusStats.jl/actions/workflows/ci.yml)
-[![Format](https://github.com/AmitaiRosenbaum/AusStats.jl/actions/workflows/format.yml/badge.svg)](https://github.com/AmitaiRosenbaum/AusStats.jl/actions/workflows/format.yml)
-[![Aqua QA](https://juliatesting.github.io/Aqua.jl/dev/assets/badge.svg)](https://github.com/JuliaTesting/Aqua.jl)
-[![](https://img.shields.io/badge/%F0%9F%9B%A9%EF%B8%8F_tested_with-JET.jl-233f9a)](https://github.com/aviatesk/JET.jl)
+[![DOI](https://zenodo.org/badge/1272914246.svg)](https://doi.org/10.5281/zenodo.20771482)
 
 AusStats.jl is a Julia package for finding, downloading, reading, and tidying
 Australian Bureau of Statistics data.
