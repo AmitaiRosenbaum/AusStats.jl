@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use AusStats.jl, please cite it as below."
+title: "AusStats.jl"
+authors:
+  - family-names: "Rosenbaum"
+    given-names: "Amitai"
+repository-code: "https://github.com/AmitaiRosenbaum/AusStats.jl"
+url: "https://amitarosenbaum.github.io/AusStats.jl/"
+license: "MIT"
+version: "0.2.1"
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.20771483
+date-released: "2026-06-20"
+keywords:
+  - Julia
+  - Australian Bureau of Statistics
+  - statistics
+  - data
+  - reproducible research
