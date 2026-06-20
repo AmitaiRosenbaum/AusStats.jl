@@ -1,0 +1,5 @@
+style = "blue"
+margin = 92
+always_for_in = true
+whitespace_typedefs = true
+format_markdown = false

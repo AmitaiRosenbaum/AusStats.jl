@@ -8,7 +8,14 @@ function dataflows(; refresh::Bool=false)
     if refresh || !isfile(path)
         url = ABS_API_BASE_URL * "/dataflow/ABS/all/latest?references=none"
         mkpath(dirname(path))
-        write(path, String(_http_get(url; accept="application/vnd.sdmx.structure+json,application/json,*/*").body))
+        write(
+            path,
+            String(
+                _http_get(
+                    url; accept="application/vnd.sdmx.structure+json,application/json,*/*"
+                ).body,
+            ),
+        )
     end
 
     return _dataflows_dataframe(JSON3.read(read(path, String)))
@@ -23,9 +30,20 @@ for `flow_id`.
 function datastructure(flow_id::AbstractString; refresh::Bool=false)
     path = _datastructure_cache_path(flow_id)
     if refresh || !isfile(path)
-        url = ABS_API_BASE_URL * "/datastructure/ABS/" * HTTP.escapeuri(flow_id) * "/all/latest?references=all"
+        url =
+            ABS_API_BASE_URL *
+            "/datastructure/ABS/" *
+            HTTP.escapeuri(flow_id) *
+            "/all/latest?references=all"
         mkpath(dirname(path))
-        write(path, String(_http_get(url; accept="application/vnd.sdmx.structure+json,application/json,*/*").body))
+        write(
+            path,
+            String(
+                _http_get(
+                    url; accept="application/vnd.sdmx.structure+json,application/json,*/*"
+                ).body,
+            ),
+        )
     end
 
     return _datastructure_dataframe(JSON3.read(read(path, String)))
@@ -43,9 +61,13 @@ function api_key(flow_id::AbstractString; filters=NamedTuple(), refresh::Bool=fa
 
     structure = datastructure(flow_id; refresh)
     dimensions = _api_dimensions(structure)
-    isempty(dimensions) && throw(ArgumentError("datastructure for `$flow_id` did not include dimensions; pass an explicit `key` to `read_api`"))
+    isempty(dimensions) && throw(
+        ArgumentError(
+            "datastructure for `$flow_id` did not include dimensions; pass an explicit `key` to `read_api`",
+        ),
+    )
 
-    matched = Dict{String,Any}()
+    matched = Dict{String, Any}()
     for (name, value) in filter_pairs
         row = _match_api_dimension(dimensions, name)
         row === nothing && throw(ArgumentError(_unknown_filter_message(name, dimensions)))
@@ -55,7 +77,10 @@ function api_key(flow_id::AbstractString; filters=NamedTuple(), refresh::Bool=fa
     segments = String[]
     for row in eachrow(dimensions)
         if haskey(matched, row.dimension_id)
-            push!(segments, _api_key_segment(structure, row.dimension_id, matched[row.dimension_id]))
+            push!(
+                segments,
+                _api_key_segment(structure, row.dimension_id, matched[row.dimension_id]),
+            )
         else
             push!(segments, "")
         end
@@ -69,25 +94,57 @@ end
 
 Read observations from the ABS API and return a tidy `DataFrame`.
 """
-function read_api(flow_id::AbstractString; key=nothing, filters=NamedTuple(), start_period=nothing, end_period=nothing, params=NamedTuple())
+function read_api(
+    flow_id::AbstractString;
+    key=nothing,
+    filters=NamedTuple(),
+    start_period=nothing,
+    end_period=nothing,
+    params=NamedTuple(),
+)
     url = _api_request_url(flow_id; key, filters, start_period, end_period, params)
     return read_api_url(url)
 end
 
-function _api_request_url(flow_id::AbstractString; key=nothing, filters=NamedTuple(), start_period=nothing, end_period=nothing, params=NamedTuple())
+function _api_request_url(
+    flow_id::AbstractString;
+    key=nothing,
+    filters=NamedTuple(),
+    start_period=nothing,
+    end_period=nothing,
+    params=NamedTuple(),
+)
     filter_pairs = _filter_pairs(filters)
-    key !== nothing && !isempty(filter_pairs) && throw(ArgumentError("pass either an explicit `key` or `filters`, not both"))
+    key !== nothing &&
+        !isempty(filter_pairs) &&
+        throw(ArgumentError("pass either an explicit `key` or `filters`, not both"))
 
-    query = Dict{String,String}()
+    query = Dict{String, String}()
     start_period === nothing || (query["startPeriod"] = string(start_period))
     end_period === nothing || (query["endPeriod"] = string(end_period))
     for pair in pairs(params)
         query[string(first(pair))] = string(last(pair))
     end
 
-    query_text = isempty(query) ? "" : "?" * join([HTTP.escapeuri(k) * "=" * HTTP.escapeuri(v) for (k, v) in sort(collect(query))], "&")
+    query_text = if isempty(query)
+        ""
+    else
+        "?" * join(
+            [
+                HTTP.escapeuri(k) * "=" * HTTP.escapeuri(v) for
+                (k, v) in sort(collect(query))
+            ],
+            "&",
+        )
+    end
     resolved_key = key === nothing ? api_key(flow_id; filters) : string(key)
-    return ABS_API_BASE_URL * "/data/ABS/" * HTTP.escapeuri(flow_id) * "/" * HTTP.escapeuri(resolved_key) * "/all" * query_text
+    return ABS_API_BASE_URL *
+           "/data/ABS/" *
+           HTTP.escapeuri(flow_id) *
+           "/" *
+           HTTP.escapeuri(resolved_key) *
+           "/all" *
+           query_text
 end
 
 """
@@ -101,10 +158,20 @@ function read_api_url(url::AbstractString)
     catch error
         error isa InterruptException && throw(error)
         message = sprint(showerror, error)
-        if occursin("HTTP 400", message) || occursin("HTTP 413", message) || occursin("HTTP 414", message) ||
-                occursin("HTTP 429", message) || occursin("HTTP 500", message) || occursin("HTTP 502", message) ||
-                occursin("HTTP 503", message) || occursin("HTTP 504", message) || occursin("timed out", lowercase(message))
-            throw(ABSError("$message Narrow large ABS API queries with `filters`, `start_period`, or `end_period`."))
+        if occursin("HTTP 400", message) ||
+            occursin("HTTP 413", message) ||
+            occursin("HTTP 414", message) ||
+            occursin("HTTP 429", message) ||
+            occursin("HTTP 500", message) ||
+            occursin("HTTP 502", message) ||
+            occursin("HTTP 503", message) ||
+            occursin("HTTP 504", message) ||
+            occursin("timed out", lowercase(message))
+            throw(
+                ABSError(
+                    "$message Narrow large ABS API queries with `filters`, `start_period`, or `end_period`.",
+                ),
+            )
         end
         rethrow(error)
     end
@@ -113,7 +180,7 @@ end
 function _dataflows_dataframe(json)
     flows = Any[]
     _collect_named_objects!(flows, json, ("dataflows", "Dataflows"))
-    rows = DataFrame(id=String[], name=String[], description=String[])
+    rows = DataFrame(; id=String[], name=String[], description=String[])
 
     for flow in flows
         id = _json_string(flow, "id")
@@ -127,13 +194,13 @@ end
 
 function _datastructure_dataframe(json)
     codelists = _datastructure_codelists(json)
-    out = DataFrame(
-        dimension_id = String[],
-        dimension_name = String[],
-        position = Int[],
-        code = Union{Missing,String}[],
-        label = Union{Missing,String}[],
-        code_position = Union{Missing,Int}[],
+    out = DataFrame(;
+        dimension_id=String[],
+        dimension_name=String[],
+        position=Int[],
+        code=Union{Missing, String}[],
+        label=Union{Missing, String}[],
+        code_position=Union{Missing, Int}[],
     )
 
     for dimension in _datastructure_dimensions(json)
@@ -149,7 +216,17 @@ function _datastructure_dataframe(json)
             for (code_position, value) in enumerate(values)
                 code = _json_string(value, "id")
                 label = _json_name(value)
-                push!(out, (id, dimension_name, position, code, isempty(label) ? missing : label, code_position))
+                push!(
+                    out,
+                    (
+                        id,
+                        dimension_name,
+                        position,
+                        code,
+                        isempty(label) ? missing : label,
+                        code_position,
+                    ),
+                )
             end
         end
     end
@@ -158,14 +235,23 @@ function _datastructure_dataframe(json)
 end
 
 function _datastructure_cache_path(flow_id::AbstractString)
-    return joinpath(_cache_subdir(:api), "datastructure_$(lowercase(_safe_filename(flow_id))).json")
+    return joinpath(
+        _cache_subdir(:api), "datastructure_$(lowercase(_safe_filename(flow_id))).json"
+    )
 end
 
 function _datastructure_dimensions(json)
     dimensions = Any[]
 
     for path in (
-        ("data", "dataStructures", 1, "dataStructureComponents", "dimensionList", "dimensions"),
+        (
+            "data",
+            "dataStructures",
+            1,
+            "dataStructureComponents",
+            "dimensionList",
+            "dimensions",
+        ),
         ("dataStructures", 1, "dataStructureComponents", "dimensionList", "dimensions"),
         ("structure", "dimensions", "series"),
         ("structure", "dimensions", "observation"),
@@ -193,7 +279,7 @@ function _datastructure_dimensions(json)
 end
 
 function _datastructure_codelists(json)
-    out = Dict{String,Any}()
+    out = Dict{String, Any}()
     codelists = Any[]
     _collect_named_objects!(codelists, json, ("codelists", "Codelists"))
 
@@ -224,15 +310,21 @@ function _dimension_position(dimension, fallback::Int)
     value === nothing && return fallback
     value isa Integer && return Int(value) + 1
     parsed = tryparse(Int, string(value))
-    parsed === nothing ? fallback : parsed + 1
+    return parsed === nothing ? fallback : parsed + 1
 end
 
-function _dimension_code_values(dimension, codelists::Dict{String,Any}=Dict{String,Any}())
+function _dimension_code_values(dimension, codelists::Dict{String, Any}=Dict{String, Any}())
     values = _json_get(dimension, "values", Any[])
-    (values isa AbstractVector || values isa JSON3.Array) && !isempty(values) && return collect(values)
+    (values isa AbstractVector || values isa JSON3.Array) &&
+        !isempty(values) &&
+        return collect(values)
 
     local_representation = _json_get(dimension, "localRepresentation", nothing)
-    enumeration = local_representation === nothing ? nothing : _json_get(local_representation, "enumeration", nothing)
+    enumeration = if local_representation === nothing
+        nothing
+    else
+        _json_get(local_representation, "enumeration", nothing)
+    end
     codelist_id = enumeration === nothing ? "" : _json_string(enumeration, "id")
     if isempty(codelist_id)
         ref = enumeration === nothing ? "" : _json_string(enumeration, "ref")
@@ -241,7 +333,9 @@ function _dimension_code_values(dimension, codelists::Dict{String,Any}=Dict{Stri
 
     if !isempty(codelist_id) && haskey(codelists, codelist_id)
         codes = _json_get(codelists[codelist_id], "items", Any[])
-        (codes isa AbstractVector || codes isa JSON3.Array) && !isempty(codes) && return collect(codes)
+        (codes isa AbstractVector || codes isa JSON3.Array) &&
+            !isempty(codes) &&
+            return collect(codes)
         codes = _json_get(codelists[codelist_id], "codes", Any[])
         (codes isa AbstractVector || codes isa JSON3.Array) && return collect(codes)
     end
@@ -251,12 +345,15 @@ end
 
 function _api_dimensions(structure::DataFrame)
     required = (:dimension_id, :dimension_name, :position)
-    all(name -> hasproperty(structure, name), required) || throw(ArgumentError("datastructure result does not include API dimension metadata"))
-    return unique(sort(structure[:, [:dimension_id, :dimension_name, :position]], :position))
+    all(name -> hasproperty(structure, name), required) ||
+        throw(ArgumentError("datastructure result does not include API dimension metadata"))
+    return unique(
+        sort(structure[:, [:dimension_id, :dimension_name, :position]], :position)
+    )
 end
 
 function _filter_pairs(filters)
-    filters === nothing && return Pair{Symbol,Any}[]
+    filters === nothing && return Pair{Symbol, Any}[]
     if filters isa NamedTuple
         return [Symbol(name) => value for (name, value) in pairs(filters)]
     elseif filters isa AbstractDict
@@ -281,9 +378,12 @@ function _unknown_filter_message(name::Symbol, dimensions::DataFrame)
 end
 
 function _api_key_segment(structure::DataFrame, dimension_id::AbstractString, value)
-    codes = value isa AbstractVector && !(value isa AbstractString) ? collect(value) : [value]
+    codes =
+        value isa AbstractVector && !(value isa AbstractString) ? collect(value) : [value]
     isempty(codes) && return ""
-    return join([_api_code_for_dimension(structure, dimension_id, code) for code in codes], "+")
+    return join(
+        [_api_code_for_dimension(structure, dimension_id, code) for code in codes], "+"
+    )
 end
 
 function _api_code_for_dimension(structure::DataFrame, dimension_id::AbstractString, code)
@@ -296,11 +396,17 @@ function _api_code_for_dimension(structure::DataFrame, dimension_id::AbstractStr
 
     for row in eachrow(valid_rows)
         lowercase(string(row.code)) == lowercase(requested) && return string(row.code)
-        !ismissing(row.label) && _api_filter_key(row.label) == _api_filter_key(requested) && return string(row.code)
+        !ismissing(row.label) &&
+            _api_filter_key(row.label) == _api_filter_key(requested) &&
+            return string(row.code)
     end
 
     examples = join(first(string.(valid_rows.code), min(nrow(valid_rows), 8)), ", ")
-    throw(ArgumentError("invalid code `$requested` for API dimension `$dimension_id`; valid codes include: $examples"))
+    throw(
+        ArgumentError(
+            "invalid code `$requested` for API dimension `$dimension_id`; valid codes include: $examples",
+        ),
+    )
 end
 
 function _api_filter_key(value)
@@ -315,8 +421,8 @@ function _sdmx_data_to_dataframe(json)
 
     out = DataFrame()
     out[!, :period] = String[]
-    out[!, :date] = Union{Missing,Date}[]
-    out[!, :value] = Union{Missing,Float64}[]
+    out[!, :date] = Union{Missing, Date}[]
+    out[!, :value] = Union{Missing, Float64}[]
 
     isempty(datasets) && return out
 
@@ -331,9 +437,17 @@ function _sdmx_data_to_dataframe(json)
                 obs_key = string(first(observation_pair))
                 obs_values = _dimension_values(obs_dimension, obs_key)
                 obs = last(observation_pair)
-                value = obs isa AbstractVector && !isempty(obs) ? _parse_abs_float(first(obs)) : _parse_abs_float(obs)
+                value = if obs isa AbstractVector && !isempty(obs)
+                    _parse_abs_float(first(obs))
+                else
+                    _parse_abs_float(obs)
+                end
                 period = get(obs_values, "TIME_PERIOD", get(obs_values, "time", obs_key))
-                row = Dict{Symbol,Any}(:period => string(period), :date => something(_parse_abs_date(period), missing), :value => value)
+                row = Dict{Symbol, Any}(
+                    :period => string(period),
+                    :date => something(_parse_abs_date(period), missing),
+                    :value => value,
+                )
                 for (name, dim_value) in merge(series_values, obs_values)
                     row[Symbol(name)] = dim_value
                 end
@@ -353,7 +467,7 @@ end
 
 function _dimension_values(dimensions, key::AbstractString)
     indexes = isempty(key) ? String[] : split(key, ":")
-    out = Dict{String,String}()
+    out = Dict{String, String}()
 
     for (position, dimension) in enumerate(dimensions)
         position <= length(indexes) || continue

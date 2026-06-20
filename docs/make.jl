@@ -9,9 +9,7 @@ makedocs(;
     format=Documenter.HTML(;
         prettyurls=get(ENV, "CI", "false") == "true",
         edit_link="main",
-        assets=[
-            asset("assets/favicon.svg", class=:ico, islocal=true),
-        ],
+        assets=[asset("assets/favicon.svg"; class=:ico, islocal=true)],
     ),
     pages=[
         "Home" => "index.md",
@@ -33,7 +31,4 @@ makedocs(;
     checkdocs=:exports,
 )
 
-deploydocs(;
-    repo="github.com/AmitaiRosenbaum/AusStats.jl.git",
-    devbranch="main",
-)
+deploydocs(; repo="github.com/AmitaiRosenbaum/AusStats.jl.git", devbranch="main")

@@ -16,13 +16,24 @@ Return a `DataFrame` describing files currently stored in the package cache.
 """
 function cache_info()
     dir = default_cache_dir()
-    info = DataFrame(kind=String[], file=String[], path=String[], size=Int64[], modified=DateTime[])
+    info = DataFrame(;
+        kind=String[], file=String[], path=String[], size=Int64[], modified=DateTime[]
+    )
 
     isdir(dir) || return info
 
     for path in sort(_cache_entries(dir))
         isfile(path) || continue
-        push!(info, (_cache_kind(dir, path), basename(path), path, filesize(path), unix2datetime(mtime(path))))
+        push!(
+            info,
+            (
+                _cache_kind(dir, path),
+                basename(path),
+                path,
+                filesize(path),
+                unix2datetime(mtime(path)),
+            ),
+        )
     end
 
     return info

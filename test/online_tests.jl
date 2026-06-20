@@ -16,13 +16,17 @@ if _online_tests_enabled()
     end
 
     @testset "Online historical release" begin
-        files_2019 = AusStats._files_for_release("6345.0", Date(2019, 9, 1); refresh=true, strict=true)
+        files_2019 = AusStats._files_for_release(
+            "6345.0", Date(2019, 9, 1); refresh=true, strict=true
+        )
         @test nrow(files_2019) >= 1
         @test all(files_2019.release_date .== "sep-2019")
         timeseries_2019 = files_2019[files_2019.is_timeseries, :]
         @test nrow(timeseries_2019) >= 1
         selected = first(sort(timeseries_2019, [:table_no, :filename]))
-        wpi = download_abs("6345.0"; file=selected.filename, release=Date(2019, 9, 1), force=true)
+        wpi = download_abs(
+            "6345.0"; file=selected.filename, release=Date(2019, 9, 1), force=true
+        )
         @test isfile(wpi)
     end
 else

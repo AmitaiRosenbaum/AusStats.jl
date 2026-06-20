@@ -18,4 +18,3 @@
     @test nrow(labelled) == 4
     @test unique(labelled.cube) == ["6202.0_lfs_labelled_matrix_cube.xlsx"]
 end
-

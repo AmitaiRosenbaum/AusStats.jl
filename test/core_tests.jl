@@ -10,21 +10,27 @@
     @test all(discovered.file_type .== "xlsx")
     @test discovered.release_date == fill("apr-2026", 3)
     @test "Download xlsx [750.18 KB]" ∉ discovered.file_title
-    @test "Table 1. Labour force status by Sex, Australia - Trend, Seasonally adjusted and Original" in discovered.file_title
-    @test "Table 1. Labour force status by Sex, Australia - Trend, Seasonally adjusted and Original" in discovered.table_title
-    @test discovered[discovered.table_no .== "2", :file_title] == ["Table 2. Labour force status by State, Territory and Sex - Trend"]
+    @test "Table 1. Labour force status by Sex, Australia - Trend, Seasonally adjusted and Original" in
+        discovered.file_title
+    @test "Table 1. Labour force status by Sex, Australia - Trend, Seasonally adjusted and Original" in
+        discovered.table_title
+    @test discovered[discovered.table_no .== "2", :file_title] ==
+        ["Table 2. Labour force status by State, Territory and Sex - Trend"]
     @test nrow(discovered[discovered.table_no .== "2", :]) == 1
     @test any(discovered.is_cube)
-    @test only(discovered[discovered.is_cube, :table_title]) == "Labour Force, Australia, detailed, quarterly, data cube"
+    @test only(discovered[discovered.is_cube, :table_title]) ==
+        "Labour Force, Australia, detailed, quarterly, data cube"
 
     archive_releases = archive_fixture_releases()
-    @test archive_releases.release_date == [Date(2019, 9, 1), Date(2019, 12, 1), Date(2020, 3, 1)]
+    @test archive_releases.release_date ==
+        [Date(2019, 9, 1), Date(2019, 12, 1), Date(2020, 3, 1)]
     @test all(startswith.(archive_releases.release_url, "https://www.abs.gov.au/"))
 
     historical_files = historical_release_fixture_rows()
     @test nrow(historical_files) == 2
     @test historical_files.release_date == fill("sep-2019", 2)
-    @test "Table 1. Total hourly rates of pay excluding bonuses: Sector by State, Original" in historical_files.table_title
+    @test "Table 1. Total hourly rates of pay excluding bonuses: Sector by State, Original" in
+        historical_files.table_title
     @test "2b" in historical_files.table_no
     AusStats._write_release_index("6345.0", archive_releases)
     AusStats._write_release_file_index("6345.0", Date(2019, 9, 1), historical_files)
@@ -36,11 +42,14 @@
     touch(cached_path)
     @test download_abs("6202.0"; dest=cache_dir) == cached_path
 
-    historical_selected = AusStats._select_file("6345.0"; release=Date(2019, 9, 1), cube=false)
+    historical_selected = AusStats._select_file(
+        "6345.0"; release=Date(2019, 9, 1), cube=false
+    )
     historical_path = joinpath(cache_dir, "workbooks", historical_selected.filename)
     mkpath(dirname(historical_path))
     touch(historical_path)
-    @test download_abs("6345.0"; release=Date(2019, 9, 1), dest=cache_dir) == historical_path
+    @test download_abs("6345.0"; release=Date(2019, 9, 1), dest=cache_dir) ==
+        historical_path
     message = try
         AusStats._files_for_release("6345.0", Date(2019, 10, 1); strict=true)
         ""
@@ -54,9 +63,23 @@
     tidy = tidy_abs(workbook; cat_no="6202.0", release_date="apr-2026")
     @test tidy isa DataFrame
     @test names(tidy) == [
-        "cat_no", "release_date", "table", "table_no", "table_title", "sheet", "sheet_no",
-        "date", "series_id", "value", "unit", "series_type", "data_type", "frequency",
-        "collection_month", "series_start", "series",
+        "cat_no",
+        "release_date",
+        "table",
+        "table_no",
+        "table_title",
+        "sheet",
+        "sheet_no",
+        "date",
+        "series_id",
+        "value",
+        "unit",
+        "series_type",
+        "data_type",
+        "frequency",
+        "collection_month",
+        "series_start",
+        "series",
     ]
     @test tidy.date[1] == Date(2026, 4, 1)
     @test ismissing(tidy.value[2])
@@ -68,9 +91,11 @@
     @test "Notes" ∉ tidy.table
 
     periods = tidy_abs(period_workbook())
-    @test periods[periods.series_id .== "M1234567", :date] == [Date(2024, 1, 1), Date(2024, 2, 1)]
+    @test periods[periods.series_id .== "M1234567", :date] ==
+        [Date(2024, 1, 1), Date(2024, 2, 1)]
     @test unique(periods[periods.series_id .== "M1234567", :frequency]) == ["monthly"]
-    @test periods[periods.series_id .== "Q1234567", :date] == [Date(2024, 1, 1), Date(2024, 4, 1), Date(2024, 7, 1)]
+    @test periods[periods.series_id .== "Q1234567", :date] ==
+        [Date(2024, 1, 1), Date(2024, 4, 1), Date(2024, 7, 1)]
     @test unique(periods[periods.series_id .== "Q1234567", :frequency]) == ["quarterly"]
     @test periods[periods.series_id .== "Y1234567", :date] == [Date(2024, 1, 1)]
     @test periods[periods.series_id .== "Y1234567", :frequency] == ["annual"]
@@ -93,7 +118,9 @@
     parsed_info = cache_info()
     @test nrow(parsed_info[parsed_info.kind .== "parsed", :]) == 1
     @test isequal(read_abs_local(workbook; tables=1, cache_parsed=false), cached_parse)
-    @test isequal(read_abs_local(workbook; tables=1, cache_parsed=true, refresh=true), cached_parse)
+    @test isequal(
+        read_abs_local(workbook; tables=1, cache_parsed=true, refresh=true), cached_parse
+    )
     parsed_info = cache_info()
     @test nrow(parsed_info[parsed_info.kind .== "parsed", :]) == 1
     sleep(1.1)
@@ -135,7 +162,9 @@
     invalid_file = joinpath(empty_directory, "notes.txt")
     touch(invalid_file)
     @test_throws ArgumentError read_abs_local(invalid_file)
-    @test_throws ArgumentError read_abs_local([first_local, joinpath(empty_directory, "missing.xlsx")])
+    @test_throws ArgumentError read_abs_local([
+        first_local, joinpath(empty_directory, "missing.xlsx")
+    ])
     @test_throws ArgumentError read_abs_local(Any[first_local, 42])
     @test_throws ArgumentError read_abs_local(String[])
     @test_throws ArgumentError read_metadata(empty_directory)
@@ -213,14 +242,13 @@
     separated = separate_series(metadata)
     @test "series_part_1" in names(separated)
     @test separated.series_part_1[1] == "Employed total"
-    split_sample = DataFrame(series=[
-        "All groups, Male, Total",
-        "Employed total, Female",
-        "Labour force",
-        missing,
-    ])
+    split_sample = DataFrame(;
+        series=[
+            "All groups, Male, Total", "Employed total, Female", "Labour force", missing
+        ],
+    )
     named_parts = separate_series(split_sample; names=[:measure, :sex, :aggregate])
-    @test names(named_parts)[(end-2):end] == ["measure", "sex", "aggregate"]
+    @test names(named_parts)[(end - 2):end] == ["measure", "sex", "aggregate"]
     @test named_parts.measure[1] == "All groups"
     @test named_parts.aggregate[1] == "Total"
 
@@ -230,7 +258,9 @@
     @test without_totals.series_part_1[2] == "Employed total"
     @test without_totals.series_part_2[2] == "Female"
 
-    complete_parts = separate_series(split_sample; names=[:measure, :sex], remove_totals=true, drop_missing=true)
+    complete_parts = separate_series(
+        split_sample; names=[:measure, :sex], remove_totals=true, drop_missing=true
+    )
     @test nrow(complete_parts) == 1
     @test complete_parts.measure == ["Employed total"]
     @test complete_parts.sex == ["Female"]
@@ -248,11 +278,22 @@
 
     matrix_cube = read_cube(labelled_cube_workbook())
     @test names(matrix_cube) == [
-        "source_file", "cat_no", "release_date", "cube", "cube_title", "sheet",
-        "date", "frequency", "value", "State", "Sex", "Age",
+        "source_file",
+        "cat_no",
+        "release_date",
+        "cube",
+        "cube_title",
+        "sheet",
+        "date",
+        "frequency",
+        "value",
+        "State",
+        "Sex",
+        "Age",
     ]
     @test nrow(matrix_cube) == 4
-    @test matrix_cube.date == [Date(2024, 3, 1), Date(2024, 6, 1), Date(2024, 3, 1), Date(2024, 6, 1)]
+    @test matrix_cube.date ==
+        [Date(2024, 3, 1), Date(2024, 6, 1), Date(2024, 3, 1), Date(2024, 6, 1)]
     @test matrix_cube.frequency == fill("unknown", 4)
     @test ismissing(matrix_cube.value[3])
     @test matrix_cube.State == ["NSW", "NSW", "NSW", "NSW"]
@@ -271,8 +312,11 @@
     @test nrow(search_cubes("labelled"; cat_no="6202.0")) == 1
     downloaded_cube = download_cube("6202.0"; cube="labelled")
     @test isfile(downloaded_cube)
-    @test downloaded_cube == joinpath(default_cache_dir(), "cubes", "6202.0_lfs_labelled_matrix_cube.xlsx")
-    cached_url_cube = labelled_cube_workbook(joinpath(default_cache_dir(), "cubes", "cached-url-cube.xlsx"))
+    @test downloaded_cube ==
+        joinpath(default_cache_dir(), "cubes", "6202.0_lfs_labelled_matrix_cube.xlsx")
+    cached_url_cube = labelled_cube_workbook(
+        joinpath(default_cache_dir(), "cubes", "cached-url-cube.xlsx")
+    )
     @test download_cube("https://example.test/cached-url-cube.xlsx") == cached_url_cube
     @test_throws ArgumentError cube_files(; release=Date(2024, 3, 1))
     @test unique(read_cpi(; table=1).cat_no) == ["6401.0"]
@@ -303,23 +347,32 @@
 
     api_datastructure_fixture()
     structure = datastructure("MOCK")
-    @test names(structure) == ["dimension_id", "dimension_name", "position", "code", "label", "code_position"]
+    @test names(structure) ==
+        ["dimension_id", "dimension_name", "position", "code", "label", "code_position"]
     @test nrow(structure) == 6
     @test structure[structure.dimension_id .== "SEX_ABS", :code] == ["1", "2", "3"]
-    @test structure[structure.dimension_id .== "SEX_ABS", :label] == ["Male", "Female", "Persons"]
+    @test structure[structure.dimension_id .== "SEX_ABS", :label] ==
+        ["Male", "Female", "Persons"]
     @test api_key("MOCK"; filters=(sex_abs="3", asgs_2016="0")) == "3.0."
     @test api_key("MOCK"; filters=(sex_abs="Persons", measure="EMP")) == "3..EMP"
     @test api_key("MOCK"; filters=Dict(:sex_abs => ["1", "2"])) == "1+2.."
     @test_throws ArgumentError api_key("MOCK"; filters=(unknown="1",))
     @test_throws ArgumentError api_key("MOCK"; filters=(sex_abs="9",))
 
-    filtered_url = AusStats._api_request_url("MOCK"; filters=(sex_abs="3", asgs_2016="0"), start_period="2024-Q1", params=(detail="dataonly",))
+    filtered_url = AusStats._api_request_url(
+        "MOCK";
+        filters=(sex_abs="3", asgs_2016="0"),
+        start_period="2024-Q1",
+        params=(detail="dataonly",),
+    )
     @test occursin("/data/ABS/MOCK/3.0./all?", filtered_url)
     @test occursin("detail=dataonly", filtered_url)
     @test occursin("startPeriod=2024-Q1", filtered_url)
     explicit_url = AusStats._api_request_url("MOCK"; key="1.0.EMP", end_period="2024-Q2")
     @test occursin("/data/ABS/MOCK/1.0.EMP/all?endPeriod=2024-Q2", explicit_url)
-    @test_throws ArgumentError AusStats._api_request_url("MOCK"; key="1", filters=(sex_abs="3",))
+    @test_throws ArgumentError AusStats._api_request_url(
+        "MOCK"; key="1", filters=(sex_abs="3",)
+    )
 
     api_rows = AusStats._sdmx_data_to_dataframe(api_data_fixture())
     @test nrow(api_rows) == 2

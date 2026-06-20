@@ -4,7 +4,7 @@ fixture_path(parts...) = joinpath(TEST_FIXTURE_DIR, parts...)
 
 function sample_workbook(path=tempname() * ".xlsx")
     mkpath(dirname(path))
-    XLSX.openxlsx(path, mode="w") do xf
+    XLSX.openxlsx(path; mode="w") do xf
         sheet = xf[1]
         XLSX.rename!(sheet, "Data1")
         sheet["A1"] = "Series ID"
@@ -58,7 +58,7 @@ end
 
 function cube_workbook(path=tempname() * ".xlsx")
     mkpath(dirname(path))
-    XLSX.openxlsx(path, mode="w") do xf
+    XLSX.openxlsx(path; mode="w") do xf
         sheet = xf[1]
         XLSX.rename!(sheet, "Cube 1")
         sheet["A1"] = "State"
@@ -73,7 +73,7 @@ end
 
 function multi_sheet_cube_workbook(path=tempname() * ".xlsx")
     mkpath(dirname(path))
-    XLSX.openxlsx(path, mode="w") do xf
+    XLSX.openxlsx(path; mode="w") do xf
         sheet = xf[1]
         XLSX.rename!(sheet, "Cube 1")
         sheet["A1"] = "State"
@@ -92,7 +92,7 @@ end
 
 function labelled_cube_workbook(path=tempname() * ".xlsx")
     mkpath(dirname(path))
-    XLSX.openxlsx(path, mode="w") do xf
+    XLSX.openxlsx(path; mode="w") do xf
         sheet = xf[1]
         XLSX.rename!(sheet, "Matrix")
         sheet["A1"] = "Labour Force detailed data cube"
@@ -217,29 +217,56 @@ end
 
 function convenience_fixture_index()
     workbook_rows = [
-        ("6302.0", "Average Weekly Earnings, Australia", "Average weekly earnings time series.", "Table 1. Average Weekly Earnings", "6302.0_awe_table_001.xlsx"),
-        ("3101.0", "National, state and territory population", "Estimated resident population time series.", "Table 1. Estimated Resident Population", "3101.0_erp_table_001.xlsx"),
-        ("6226.0", "Job Mobility, Australia", "Job mobility time series.", "Table 1. Job Mobility", "6226.0_job_mobility_table_001.xlsx"),
-        ("6160.0.55.001", "Weekly Payroll Jobs and Wages in Australia", "Weekly payroll jobs and wages time series.", "Table 1. Payroll Jobs", "6160.0.55.001_payrolls_table_001.xlsx"),
+        (
+            "6302.0",
+            "Average Weekly Earnings, Australia",
+            "Average weekly earnings time series.",
+            "Table 1. Average Weekly Earnings",
+            "6302.0_awe_table_001.xlsx",
+        ),
+        (
+            "3101.0",
+            "National, state and territory population",
+            "Estimated resident population time series.",
+            "Table 1. Estimated Resident Population",
+            "3101.0_erp_table_001.xlsx",
+        ),
+        (
+            "6226.0",
+            "Job Mobility, Australia",
+            "Job mobility time series.",
+            "Table 1. Job Mobility",
+            "6226.0_job_mobility_table_001.xlsx",
+        ),
+        (
+            "6160.0.55.001",
+            "Weekly Payroll Jobs and Wages in Australia",
+            "Weekly payroll jobs and wages time series.",
+            "Table 1. Payroll Jobs",
+            "6160.0.55.001_payrolls_table_001.xlsx",
+        ),
     ]
 
     rows = AusStats._seed_file_rows()
     for (cat_no, title, description, file_title, filename) in workbook_rows
-        push!(rows, AusStats._file_row(;
-            cat_no,
-            title,
-            description,
-            page_url="https://example.test/$cat_no",
-            release_date="apr-2026",
-            file_title,
-            url="https://example.test/$filename",
-            filename,
-            file_type="xlsx",
-            table_no="1",
-            table_title=file_title,
-            is_timeseries=true,
-            is_cube=false,
-        ))
+        push!(
+            rows,
+            AusStats._file_row(;
+                cat_no,
+                title,
+                description,
+                page_url="https://example.test/$cat_no",
+                release_date="apr-2026",
+                file_title,
+                url="https://example.test/$filename",
+                filename,
+                file_type="xlsx",
+                table_no="1",
+                table_title=file_title,
+                is_timeseries=true,
+                is_cube=false,
+            ),
+        )
     end
 
     cube_rows = [
@@ -248,21 +275,24 @@ function convenience_fixture_index()
         ("Labelled matrix Labour Force data cube", "6202.0_lfs_labelled_matrix_cube.xlsx"),
     ]
     for (file_title, filename) in cube_rows
-        push!(rows, AusStats._file_row(;
-            cat_no="6202.0",
-            title="Labour Force, Australia",
-            description="Labour force data cubes.",
-            page_url="https://example.test/6202.0",
-            release_date="apr-2026",
-            file_title,
-            url="https://example.test/$filename",
-            filename,
-            file_type="xlsx",
-            table_no="",
-            table_title=file_title,
-            is_timeseries=false,
-            is_cube=true,
-        ))
+        push!(
+            rows,
+            AusStats._file_row(;
+                cat_no="6202.0",
+                title="Labour Force, Australia",
+                description="Labour force data cubes.",
+                page_url="https://example.test/6202.0",
+                release_date="apr-2026",
+                file_title,
+                url="https://example.test/$filename",
+                filename,
+                file_type="xlsx",
+                table_no="",
+                table_title=file_title,
+                is_timeseries=false,
+                is_cube=true,
+            ),
+        )
     end
 
     index = AusStats._file_rows_dataframe(rows)
@@ -273,7 +303,11 @@ function convenience_fixture_index()
     end
     for row in eachrow(index[index.is_cube, :])
         path = joinpath(default_cache_dir(), "cubes", row.filename)
-        occursin("labelled", row.filename) ? labelled_cube_workbook(path) : cube_workbook(path)
+        if occursin("labelled", row.filename)
+            labelled_cube_workbook(path)
+        else
+            cube_workbook(path)
+        end
     end
 
     return index
@@ -282,7 +316,7 @@ end
 function period_workbook()
     path = tempname() * ".xlsx"
 
-    XLSX.openxlsx(path, mode="w") do xf
+    XLSX.openxlsx(path; mode="w") do xf
         sheet = xf[1]
         XLSX.rename!(sheet, "Monthly")
         sheet["A1"] = "Series ID"
@@ -313,7 +347,7 @@ function period_workbook()
 end
 
 function metadata_layout_workbook(path=tempname() * ".xlsx")
-    XLSX.openxlsx(path, mode="w") do xf
+    XLSX.openxlsx(path; mode="w") do xf
         sheet = xf[1]
         XLSX.rename!(sheet, "CPI Metadata")
         sheet["A1"] = "Consumer Price Index, Australia"
@@ -389,13 +423,15 @@ function discovery_fixture_rows()
     html = read(fixture_path("abs_publication_downloads.html"), String)
     doc = AusStats._parse_html(html)
     seed = first(AusStats.ABS_SEED_CATALOGUES)
-    return AusStats._file_rows_dataframe(AusStats._discover_files_from_doc(
-        doc,
-        seed;
-        title=seed.title,
-        description=seed.description,
-        page_url="https://www.abs.gov.au/statistics/labour/employment-and-unemployment/labour-force-australia/apr-2026",
-    ))
+    return AusStats._file_rows_dataframe(
+        AusStats._discover_files_from_doc(
+            doc,
+            seed;
+            title=seed.title,
+            description=seed.description,
+            page_url="https://www.abs.gov.au/statistics/labour/employment-and-unemployment/labour-force-australia/apr-2026",
+        ),
+    )
 end
 
 function archive_fixture_releases()
@@ -409,11 +445,13 @@ function historical_release_fixture_rows()
     html = read(fixture_path("abs_wpi_sep_2019_downloads.html"), String)
     doc = AusStats._parse_html(html)
     seed = AusStats._seed_for_catalogue("6345.0")
-    return AusStats._file_rows_dataframe(AusStats._discover_files_from_doc(
-        doc,
-        seed;
-        title=seed.title,
-        description=seed.description,
-        page_url="https://www.abs.gov.au/statistics/economy/price-indexes-and-inflation/wage-price-index-australia/sep-2019",
-    ))
+    return AusStats._file_rows_dataframe(
+        AusStats._discover_files_from_doc(
+            doc,
+            seed;
+            title=seed.title,
+            description=seed.description,
+            page_url="https://www.abs.gov.au/statistics/economy/price-indexes-and-inflation/wage-price-index-australia/sep-2019",
+        ),
+    )
 end

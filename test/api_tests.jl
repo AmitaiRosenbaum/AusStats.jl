@@ -2,7 +2,8 @@
     api_datastructure_fixture()
     structure = datastructure("MOCK")
     @test nrow(structure) == 6
-    @test names(structure) == ["dimension_id", "dimension_name", "position", "code", "label", "code_position"]
+    @test names(structure) ==
+        ["dimension_id", "dimension_name", "position", "code", "label", "code_position"]
     @test api_key("MOCK"; filters=(sex_abs="3", asgs_2016="0")) == "3.0."
     @test api_key("MOCK"; filters=(sex_abs="Persons", measure="EMP")) == "3..EMP"
     @test_throws ArgumentError api_key("MOCK"; filters=(sex_abs="9",))
@@ -17,20 +18,23 @@ end
 @testset "API helper edge cases" begin
     api_dir = joinpath(default_cache_dir(), "api")
     mkpath(api_dir)
-    write(joinpath(api_dir, "dataflows.json"), """
-    {
-      "Dataflows": {
-        "first": {
-          "id": "FLOW_A",
-          "name": {"en": "Flow A"},
-          "description": {"en": "First flow"}
-        },
-        "missing_id": {
-          "name": {"en": "Skipped"}
-        }
-      }
+    write(
+        joinpath(api_dir, "dataflows.json"),
+        """
+{
+  "Dataflows": {
+    "first": {
+      "id": "FLOW_A",
+      "name": {"en": "Flow A"},
+      "description": {"en": "First flow"}
+    },
+    "missing_id": {
+      "name": {"en": "Skipped"}
     }
-    """)
+  }
+}
+""",
+    )
     flow_rows = dataflows()
     @test flow_rows.id == ["FLOW_A"]
     @test flow_rows.name == ["Flow A"]
@@ -62,20 +66,24 @@ end
     @test alternate.code == ["X"]
     @test alternate.label == ["Code X"]
 
-    direct_dimensions = AusStats._datastructure_dataframe(JSON3.read("""
-    {
-      "structure": {
-        "dimensions": {
-          "series": [
-            {"id": "SERIES_DIM", "name": {"en": "Series dimension"}, "values": [{"id": "S1", "name": {"en": "Series one"}}]}
-          ],
-          "observation": [
-            {"id": "OBS_DIM", "name": {"en": "Observation dimension"}, "values": [{"id": "O1"}]}
-          ]
-        }
-      }
+    direct_dimensions = AusStats._datastructure_dataframe(
+        JSON3.read(
+            """
+{
+  "structure": {
+    "dimensions": {
+      "series": [
+        {"id": "SERIES_DIM", "name": {"en": "Series dimension"}, "values": [{"id": "S1", "name": {"en": "Series one"}}]}
+      ],
+      "observation": [
+        {"id": "OBS_DIM", "name": {"en": "Observation dimension"}, "values": [{"id": "O1"}]}
+      ]
     }
-    """))
+  }
+}
+""",
+        ),
+    )
     @test direct_dimensions.dimension_id == ["SERIES_DIM", "OBS_DIM"]
     @test direct_dimensions.code == ["S1", "O1"]
 
@@ -118,7 +126,7 @@ end
     @test api_key("MOCK") == "all"
     @test_throws ArgumentError api_key("MOCK"; filters=["not" => "valid"])
     @test AusStats._api_code_for_dimension(no_codes, "FREE_TEXT", "anything") == "anything"
-    @test_throws ArgumentError AusStats._api_dimensions(DataFrame(id=["x"]))
+    @test_throws ArgumentError AusStats._api_dimensions(DataFrame(; id=["x"]))
 
     empty_sdmx = AusStats._sdmx_data_to_dataframe(JSON3.read("""{"dataSets": []}"""))
     @test nrow(empty_sdmx) == 0

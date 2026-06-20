@@ -1,12 +1,14 @@
 @testset "HTTP wrappers" begin
     workbook = sample_workbook()
     cube = cube_workbook()
-    server = HTTP.serve!(listenany=true) do request
+    server = HTTP.serve!(; listenany=true) do request
         target = string(request.target)
         if startswith(target, "/json")
-            return HTTP.Response(200, ["Content-Type" => "application/json"], body="""{"ok":true}""")
+            return HTTP.Response(
+                200, ["Content-Type" => "application/json"]; body="""{"ok":true}"""
+            )
         elseif startswith(target, "/api")
-            return HTTP.Response(200, ["Content-Type" => "application/json"], body="""
+            return HTTP.Response(200, ["Content-Type" => "application/json"]; body="""
             {
               "structure": {
                 "dimensions": {
@@ -22,11 +24,23 @@
         elseif startswith(target, "/missing")
             return HTTP.Response(404, "missing")
         elseif startswith(target, "/bad-json")
-            return HTTP.Response(200, ["Content-Type" => "application/json"], body="{")
+            return HTTP.Response(200, ["Content-Type" => "application/json"]; body="{")
         elseif startswith(target, "/jul-2026/workbook.xlsx")
-            return HTTP.Response(200, ["Content-Type" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"], body=read(workbook))
+            return HTTP.Response(
+                200,
+                [
+                    "Content-Type" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                ];
+                body=read(workbook),
+            )
         elseif startswith(target, "/jul-2026/cube.xlsx")
-            return HTTP.Response(200, ["Content-Type" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"], body=read(cube))
+            return HTTP.Response(
+                200,
+                [
+                    "Content-Type" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                ];
+                body=read(cube),
+            )
         end
         return HTTP.Response(200, "hello")
     end

@@ -6,17 +6,46 @@ workbooks are returned as tidy long-format `DataFrame`s by default. Parsed
 `DataFrame`s are cached by default and invalidated when the source workbook,
 parser version, package version, or read options change.
 """
-function read_abs(source::AbstractString; tables=nothing, release=:latest, tidy::Bool=true, cache::Bool=true, cache_parsed::Bool=true, refresh::Bool=false)
+function read_abs(
+    source::AbstractString;
+    tables=nothing,
+    release=:latest,
+    tidy::Bool=true,
+    cache::Bool=true,
+    cache_parsed::Bool=true,
+    refresh::Bool=false,
+)
     if _is_url(source)
-        return read_abs_url(source; tables=tables, tidy=tidy, cache=cache, cache_parsed=cache_parsed, refresh=refresh)
+        return read_abs_url(
+            source;
+            tables=tables,
+            tidy=tidy,
+            cache=cache,
+            cache_parsed=cache_parsed,
+            refresh=refresh,
+        )
     elseif isfile(source)
-        return read_abs_local(source; tables=tables, tidy=tidy, cache_parsed=cache_parsed, refresh=refresh)
+        return read_abs_local(
+            source; tables=tables, tidy=tidy, cache_parsed=cache_parsed, refresh=refresh
+        )
     end
 
     refresh && files(source; refresh=true)
     row = _select_file(source; release=release, cube=false)
-    path = cache ? download_abs(source; file=row.filename, release=release) : _download_file(row.url; dest=mktempdir(), filename=row.filename, force=true)
-    return _read_workbook(path; tables=tables, tidy=tidy, cat_no=row.cat_no, release_date=row.release_date, cache_parsed=cache_parsed, refresh=refresh)
+    path = if cache
+        download_abs(source; file=row.filename, release=release)
+    else
+        _download_file(row.url; dest=mktempdir(), filename=row.filename, force=true)
+    end
+    return _read_workbook(
+        path;
+        tables=tables,
+        tidy=tidy,
+        cat_no=row.cat_no,
+        release_date=row.release_date,
+        cache_parsed=cache_parsed,
+        refresh=refresh,
+    )
 end
 
 """
@@ -24,10 +53,19 @@ end
 
 Read an ABS workbook directly from `url`.
 """
-function read_abs_url(url::AbstractString; tables=nothing, tidy::Bool=true, cache::Bool=true, cache_parsed::Bool=true, refresh::Bool=false)
+function read_abs_url(
+    url::AbstractString;
+    tables=nothing,
+    tidy::Bool=true,
+    cache::Bool=true,
+    cache_parsed::Bool=true,
+    refresh::Bool=false,
+)
     dest = cache ? _cache_subdir(:workbooks) : mktempdir()
     path = _download_file(url; dest=dest, force=!cache)
-    return _read_workbook(path; tables=tables, tidy=tidy, cache_parsed=cache_parsed, refresh=refresh)
+    return _read_workbook(
+        path; tables=tables, tidy=tidy, cache_parsed=cache_parsed, refresh=refresh
+    )
 end
 
 """
@@ -36,22 +74,44 @@ end
 Read ABS workbooks from a local file, vector of files, or directory. Directory
 reads include `.xls` and `.xlsx` files and are non-recursive by default.
 """
-function read_abs_local(path::AbstractString; tables=nothing, tidy::Bool=true, recursive::Bool=false, cache_parsed::Bool=true, refresh::Bool=false)
+function read_abs_local(
+    path::AbstractString;
+    tables=nothing,
+    tidy::Bool=true,
+    recursive::Bool=false,
+    cache_parsed::Bool=true,
+    refresh::Bool=false,
+)
     if isdir(path)
         paths = _local_workbook_paths(path; recursive)
-        return _read_local_workbooks(paths; tables=tables, tidy=tidy, cache_parsed=cache_parsed, refresh=refresh)
+        return _read_local_workbooks(
+            paths; tables=tables, tidy=tidy, cache_parsed=cache_parsed, refresh=refresh
+        )
     end
 
     _validate_local_workbook(path)
-    return _read_workbook(path; tables=tables, tidy=tidy, cache_parsed=cache_parsed, refresh=refresh)
+    return _read_workbook(
+        path; tables=tables, tidy=tidy, cache_parsed=cache_parsed, refresh=refresh
+    )
 end
 
-function read_abs_local(paths::AbstractVector; tables=nothing, tidy::Bool=true, recursive::Bool=false, cache_parsed::Bool=true, refresh::Bool=false)
+function read_abs_local(
+    paths::AbstractVector;
+    tables=nothing,
+    tidy::Bool=true,
+    recursive::Bool=false,
+    cache_parsed::Bool=true,
+    refresh::Bool=false,
+)
     isempty(paths) && throw(ArgumentError("no local workbook paths were supplied"))
 
     workbooks = String[]
     for (index, path) in enumerate(paths)
-        path isa AbstractString || throw(ArgumentError("local workbook path at index $index must be a string, got $(typeof(path))"))
+        path isa AbstractString || throw(
+            ArgumentError(
+                "local workbook path at index $index must be a string, got $(typeof(path))",
+            ),
+        )
         if isdir(path)
             append!(workbooks, _local_workbook_paths(path; recursive))
         else
@@ -62,7 +122,9 @@ function read_abs_local(paths::AbstractVector; tables=nothing, tidy::Bool=true, 
 
     unique!(workbooks)
     isempty(workbooks) && throw(ArgumentError("no local Excel workbooks were found"))
-    return _read_local_workbooks(workbooks; tables=tables, tidy=tidy, cache_parsed=cache_parsed, refresh=refresh)
+    return _read_local_workbooks(
+        workbooks; tables=tables, tidy=tidy, cache_parsed=cache_parsed, refresh=refresh
+    )
 end
 
 """
@@ -80,16 +142,34 @@ end
 
 Read observations for one or more ABS series identifiers.
 """
-function read_series(series_id; cat_no=nothing, tables=nothing, release=:latest, cache::Bool=true, cache_parsed::Bool=true)
+function read_series(
+    series_id;
+    cat_no=nothing,
+    tables=nothing,
+    release=:latest,
+    cache::Bool=true,
+    cache_parsed::Bool=true,
+)
     ids = series_id isa AbstractString ? [series_id] : collect(series_id)
     needles = Set(lowercase(strip(string(id))) for id in ids)
 
-    catalogue_list = cat_no === nothing ? catalogues().cat_no : (cat_no isa AbstractString ? [cat_no] : collect(cat_no))
+    catalogue_list = if cat_no === nothing
+        catalogues().cat_no
+    else
+        (cat_no isa AbstractString ? [cat_no] : collect(cat_no))
+    end
     out = _empty_tidy_abs()
 
     for catalogue in catalogue_list
         df = try
-            read_abs(string(catalogue); tables=tables, release=release, tidy=true, cache=cache, cache_parsed=cache_parsed)
+            read_abs(
+                string(catalogue);
+                tables=tables,
+                release=release,
+                tidy=true,
+                cache=cache,
+                cache_parsed=cache_parsed,
+            )
         catch
             continue
         end
@@ -112,17 +192,28 @@ column names. Set `remove_totals=true` to drop standalone aggregate labels such
 as `Total` or `All groups` from the split components. Set `drop_missing=true`
 to remove rows where any split component is missing.
 """
-function separate_series(df::DataFrame; column=:series, names=nothing, remove_totals::Bool=false, drop_missing::Bool=false)
+function separate_series(
+    df::DataFrame;
+    column=:series,
+    names=nothing,
+    remove_totals::Bool=false,
+    drop_missing::Bool=false,
+)
     name = Symbol(column)
     hasproperty(df, name) || throw(ArgumentError("column `$column` was not found"))
 
-    parts = [ismissing(value) ? String[] : _series_parts(string(value); remove_totals) for value in df[!, name]]
+    parts = [
+        ismissing(value) ? String[] : _series_parts(string(value); remove_totals) for
+        value in df[!, name]
+    ]
     max_parts = maximum(length, parts; init=0)
     output_names = _series_part_names(name, max_parts, names)
     out = copy(df)
 
     for (index, output_name) in enumerate(output_names)
-        out[!, output_name] = [index <= length(row_parts) ? row_parts[index] : missing for row_parts in parts]
+        out[!, output_name] = [
+            index <= length(row_parts) ? row_parts[index] : missing for row_parts in parts
+        ]
     end
 
     return drop_missing && !isempty(output_names) ? dropmissing(out, output_names) : out
@@ -141,11 +232,23 @@ function latest_date(df::DataFrame; date=:date)
     return maximum(values)
 end
 
-function _read_workbook(path::AbstractString; tables=nothing, tidy::Bool=true, cat_no=missing, release_date=missing, cache_parsed::Bool=true, refresh::Bool=false)
+function _read_workbook(
+    path::AbstractString;
+    tables=nothing,
+    tidy::Bool=true,
+    cat_no=missing,
+    release_date=missing,
+    cache_parsed::Bool=true,
+    refresh::Bool=false,
+)
     options = (tables=tables, tidy=tidy, cat_no=cat_no, release_date=release_date)
-    return _with_parsed_cache(path; kind=:read_abs, options=options, cache_parsed=cache_parsed, refresh=refresh) do
+    return _with_parsed_cache(
+        path; kind=:read_abs, options=options, cache_parsed=cache_parsed, refresh=refresh
+    ) do
         if tidy
-            return _read_tidy_workbook(path; tables=tables, cat_no=cat_no, release_date=release_date)
+            return _read_tidy_workbook(
+                path; tables=tables, cat_no=cat_no, release_date=release_date
+            )
         end
 
         return _read_raw_workbook(path; tables=tables)
@@ -159,7 +262,11 @@ function _metadata_source(source::AbstractString)
     elseif isfile(source)
         return (source, missing, missing)
     elseif ispath(source)
-        throw(ArgumentError("metadata source must be a workbook file, not a directory: `$source`"))
+        throw(
+            ArgumentError(
+                "metadata source must be a workbook file, not a directory: `$source`"
+            ),
+        )
     end
 
     row = _select_file(source; release=:latest, cube=false)
@@ -167,7 +274,9 @@ function _metadata_source(source::AbstractString)
     return (path, row.cat_no, row.release_date)
 end
 
-function _read_metadata_workbook(path::AbstractString; tables=nothing, cat_no=missing, release_date=missing)
+function _read_metadata_workbook(
+    path::AbstractString; tables=nothing, cat_no=missing, release_date=missing
+)
     _validate_local_workbook(path; context="metadata source")
     out = _empty_abs_metadata()
     source_workbook = abspath(path)
@@ -187,7 +296,11 @@ function _read_metadata_workbook(path::AbstractString; tables=nothing, cat_no=mi
                     source_workbook,
                 )
             catch error
-                throw(ArgumentError("failed to extract metadata from sheet `$sheetname` in `$path`: $(sprint(showerror, error))"))
+                throw(
+                    ArgumentError(
+                        "failed to extract metadata from sheet `$sheetname` in `$path`: $(sprint(showerror, error))",
+                    ),
+                )
             end
             isempty(metadata) || append!(out, metadata)
         end
@@ -196,12 +309,20 @@ function _read_metadata_workbook(path::AbstractString; tables=nothing, cat_no=mi
     return unique(out)
 end
 
-function _read_local_workbooks(paths; tables=nothing, tidy::Bool=true, cache_parsed::Bool=true, refresh::Bool=false)
+function _read_local_workbooks(
+    paths; tables=nothing, tidy::Bool=true, cache_parsed::Bool=true, refresh::Bool=false
+)
     combined = DataFrame()
 
     for path in paths
         table = try
-            _read_workbook(path; tables=tables, tidy=tidy, cache_parsed=cache_parsed, refresh=refresh)
+            _read_workbook(
+                path;
+                tables=tables,
+                tidy=tidy,
+                cache_parsed=cache_parsed,
+                refresh=refresh,
+            )
         catch error
             message = sprint(showerror, error)
             throw(ArgumentError("failed to read local workbook `$path`: $message"))
@@ -238,14 +359,20 @@ function _local_workbook_paths(directory::AbstractString; recursive::Bool=false)
     end
 
     sort!(unique!(paths))
-    isempty(paths) && throw(ArgumentError("directory `$directory` contains no .xls or .xlsx workbooks$(recursive ? "" : "; pass `recursive=true` to search subdirectories")"))
+    isempty(paths) && throw(
+        ArgumentError(
+            "directory `$directory` contains no .xls or .xlsx workbooks$(recursive ? "" : "; pass `recursive=true` to search subdirectories")",
+        ),
+    )
     return paths
 end
 
 function _validate_local_workbook(path::AbstractString; context::AbstractString="path")
     ispath(path) || throw(ArgumentError("$context does not exist: `$path`"))
     isfile(path) || throw(ArgumentError("$context is not a file: `$path`"))
-    _is_excel_workbook(path) || throw(ArgumentError("unsupported local file `$path`; expected a .xls or .xlsx workbook"))
+    _is_excel_workbook(path) || throw(
+        ArgumentError("unsupported local file `$path`; expected a .xls or .xlsx workbook"),
+    )
     return abspath(path)
 end
 
@@ -253,7 +380,9 @@ function _is_excel_workbook(path::AbstractString)
     return lowercase(splitext(path)[2]) in (".xls", ".xlsx")
 end
 
-function _read_tidy_workbook(path::AbstractString; tables=nothing, cat_no=missing, release_date=missing)
+function _read_tidy_workbook(
+    path::AbstractString; tables=nothing, cat_no=missing, release_date=missing
+)
     if tables === nothing
         return tidy_abs(path; cat_no, release_date)
     end
@@ -264,7 +393,13 @@ function _read_tidy_workbook(path::AbstractString; tables=nothing, cat_no=missin
         selected = _matching_tables(sheetnames, tables)
         for sheetname in selected
             sheet_index = findfirst(==(sheetname), sheetnames)
-            table = _tidy_sheet(xf[sheetname], sheetname; cat_no, release_date, sheet_index=something(sheet_index, 1))
+            table = _tidy_sheet(
+                xf[sheetname],
+                sheetname;
+                cat_no,
+                release_date,
+                sheet_index=something(sheet_index, 1),
+            )
             isempty(table) || append!(out, table)
         end
     end
@@ -274,7 +409,8 @@ end
 function _read_raw_workbook(path::AbstractString; tables=nothing)
     XLSX.openxlsx(path) do xf
         sheetnames = XLSX.sheetnames(xf)
-        selected = tables === nothing ? [first(sheetnames)] : _matching_tables(sheetnames, tables)
+        selected =
+            tables === nothing ? [first(sheetnames)] : _matching_tables(sheetnames, tables)
         return _read_sheet(xf[first(selected)])
     end
 end
@@ -284,11 +420,18 @@ function _matching_tables(sheetnames, tables)
     matches = String[]
 
     for request in requested
-        append!(matches, [sheetname for sheetname in sheetnames if _table_matches(sheetname, request)])
+        append!(
+            matches,
+            [sheetname for sheetname in sheetnames if _table_matches(sheetname, request)],
+        )
     end
 
     unique_matches = unique(matches)
-    isempty(unique_matches) && throw(ArgumentError("no sheets matched tables $(collect(requested)); available sheets are: $(join(sheetnames, ", "))"))
+    isempty(unique_matches) && throw(
+        ArgumentError(
+            "no sheets matched tables $(collect(requested)); available sheets are: $(join(sheetnames, ", "))",
+        ),
+    )
     return unique_matches
 end
 
@@ -342,9 +485,19 @@ function _series_matches(df::DataFrame, needles::Set{String})
 end
 
 function _series_parts(value::AbstractString; remove_totals::Bool=false)
-    delimiter = occursin(";", value) ? r"\s*;\s*" : occursin("|", value) ? r"\s*\|\s*" : r"\s*,\s*"
+    delimiter = if occursin(";", value)
+        r"\s*;\s*"
+    elseif occursin("|", value)
+        r"\s*\|\s*"
+    else
+        r"\s*,\s*"
+    end
     parts = [strip(part) for part in split(value, delimiter) if !isempty(strip(part))]
-    return remove_totals ? [part for part in parts if !_is_aggregate_series_part(part)] : parts
+    return if remove_totals
+        [part for part in parts if !_is_aggregate_series_part(part)]
+    else
+        parts
+    end
 end
 
 function _series_part_names(column::Symbol, count::Int, names)
@@ -352,9 +505,11 @@ function _series_part_names(column::Symbol, count::Int, names)
         return [Symbol("$(column)_part_$index") for index in 1:count]
     end
 
-    names isa AbstractString && throw(ArgumentError("names must be a vector or tuple of symbols or strings"))
+    names isa AbstractString &&
+        throw(ArgumentError("names must be a vector or tuple of symbols or strings"))
     provided = collect(names)
-    length(provided) == count || throw(ArgumentError("names must contain $count entries; got $(length(provided))"))
+    length(provided) == count ||
+        throw(ArgumentError("names must contain $count entries; got $(length(provided))"))
     return Symbol.(provided)
 end
 

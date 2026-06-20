@@ -7,16 +7,29 @@
     matrix = read_cube(labelled_cube_workbook())
     @test nrow(matrix) == 4
     @test names(matrix) == [
-        "source_file", "cat_no", "release_date", "cube", "cube_title", "sheet",
-        "date", "frequency", "value", "State", "Sex", "Age",
+        "source_file",
+        "cat_no",
+        "release_date",
+        "cube",
+        "cube_title",
+        "sheet",
+        "date",
+        "frequency",
+        "value",
+        "State",
+        "Sex",
+        "Age",
     ]
-    @test matrix.date == [Date(2024, 3, 1), Date(2024, 6, 1), Date(2024, 3, 1), Date(2024, 6, 1)]
+    @test matrix.date ==
+        [Date(2024, 3, 1), Date(2024, 6, 1), Date(2024, 3, 1), Date(2024, 6, 1)]
     @test ismissing(matrix.value[3])
     @test matrix.Sex == ["Male", "Male", "Female", "Female"]
 
     forced_matrix = read_cube(labelled_cube_workbook(); family=:labelled_matrix)
     @test nrow(forced_matrix) == 4
-    @test_throws ArgumentError AusStats._read_cube_workbook(cube_workbook(); family=:unsupported)
+    @test_throws ArgumentError AusStats._read_cube_workbook(
+        cube_workbook(); family=:unsupported
+    )
 
     multisheet = read_cube(multi_sheet_cube_workbook(); family=:generic)
     @test nrow(multisheet) == 2
