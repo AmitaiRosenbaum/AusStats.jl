@@ -88,10 +88,36 @@ end
     @test AusStats._release_month_number("September") == 9
     @test AusStats._release_page_from_file_url("https://example.test/path/file.xlsx") == "https://example.test/path"
     @test AusStats._release_page_from_file_url("https://example.test/path/may-2026/file.xlsx") == "https://example.test/path/may-2026"
+    @test AusStats._release_date_from_url("https://example.test/path/may-2026/file.xlsx") == Date(2026, 5, 1)
+    @test AusStats._release_date_from_url("https://example.test/path/file.xlsx") === nothing
     @test AusStats._looks_like_release_url(seed.page_url * "/may-2026", seed)
+    @test AusStats._looks_like_release_url(seed.page_url * "/release/may-2026/details", seed)
     @test !AusStats._looks_like_release_url("https://example.test/may-2026", seed)
     @test occursin("no releases are known", AusStats._missing_release_message("9999.0", Date(2026, 1, 1), Date[]))
     @test occursin("2026-02-01", AusStats._missing_release_message("9999.0", Date(2026, 1, 15), [Date(2026, 2, 1), Date(2027, 1, 1)]))
+    @test_throws ArgumentError AusStats._selector_xpath(".unsupported")
+
+    undated_seed = (
+        cat_no = "9996.0",
+        title = "Undated seed",
+        description = "No date in URL",
+        page_url = "https://example.test/undated",
+        file_title = "Seed file",
+        url = "https://example.test/undated/file.xlsx",
+        filename = "file.xlsx",
+        table_no = "1",
+        is_timeseries = true,
+        is_cube = false,
+    )
+    seed_release = AusStats._seed_release_row(undated_seed)
+    @test seed_release.release_date == Date(1, 1, 1)
+    @test seed_release.release_url == "https://example.test/undated"
+
+    release_index_path = AusStats._release_index_path("6202.0")
+    isfile(release_index_path) && rm(release_index_path)
+    fallback_releases = AusStats._release_index("6202.0")
+    @test nrow(fallback_releases) == 1
+    @test fallback_releases.release_date == [Date(2026, 4, 1)]
 
     generic_html = """
     <html><body>

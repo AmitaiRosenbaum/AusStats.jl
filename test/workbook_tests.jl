@@ -19,6 +19,28 @@
 end
 
 @testset "Workbook parser helper edge cases" begin
+    workbook = sample_workbook()
+    XLSX.openxlsx(workbook) do xf
+        @test AusStats._selected_sheets(xf, nothing) == XLSX.sheetnames(xf)
+        @test AusStats._selected_sheets(xf, "Data1") == ["Data1"]
+        @test AusStats._selected_sheets(xf, ("Data1", "Table 2")) == ["Data1", "Table 2"]
+        raw = AusStats._read_sheet(xf["Data1"]; header_row=1)
+        @test nrow(raw) >= 1
+        @test "Series_ID" in names(raw)
+    end
+    @test AusStats._column_names(Any[missing, "", "A B", "A B"]) == [:Column1, :Column2, :A_B, :A_B_2]
+
+    no_metadata_path = tempname() * ".xlsx"
+    XLSX.openxlsx(no_metadata_path, mode="w") do xf
+        sheet = xf[1]
+        XLSX.rename!(sheet, "No metadata")
+        sheet["A1"] = "Notes"
+        sheet["B1"] = "Only notes"
+    end
+    XLSX.openxlsx(no_metadata_path) do xf
+        @test isempty(AusStats._metadata_sheet(xf["No metadata"], "No metadata"))
+    end
+
     rows = Any[
         Any["Header", "Value"],
         Any["Notes", "not a date"],
@@ -56,6 +78,7 @@ end
     @test AusStats._normalise_frequency("Yearly") == "annual"
     @test AusStats._normalise_frequency("Fortnightly") == "fortnightly"
     @test AusStats._normalise_frequency("Daily") == "daily"
+    @test AusStats._normalise_frequency("Mystery cadence") == "unknown"
     @test AusStats._normalise_frequency("") == "unknown"
     @test !AusStats._looks_like_abs_series_id("")
     @test AusStats._sheet_context("Table 9", 3, missing, missing).table_no == "9"
@@ -73,6 +96,8 @@ end
     @test context.cat_no == "9999.0"
     @test context.release_date == "mar-2024"
     @test context.table_no == "5"
+    @test AusStats._infer_release_value(Any[Any["Release Date", ""], Any["Released: April 2024"]]) == "apr-2024"
+    @test isempty(AusStats._tidy_sheet_time_across(Any[Any["No dates"], Any["Still no dates"]], "NoDates"))
     @test AusStats._first_matching_text(Any["none", "Catalogue 1234.5"], r"[0-9]{4}\.[0-9]") == "1234.5"
     @test AusStats._first_matching_text(Any["none"], r"[0-9]+") === nothing
 end

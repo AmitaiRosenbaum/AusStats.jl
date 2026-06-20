@@ -141,6 +141,11 @@
     @test_throws ArgumentError read_metadata(empty_directory)
     @test AusStats._table_matches("Table 12. Detailed data", "12")
     @test !AusStats._table_matches("Table 12. Detailed data", "")
+    @test AusStats._table_matches("Detailed Monthly Data", "monthly")
+    @test nrow(read_series("missing-series"; cat_no=["0000.0"])) == 0
+    broken_workbook = joinpath(empty_directory, "broken.xlsx")
+    write(broken_workbook, "not an excel workbook")
+    @test_throws ArgumentError AusStats._read_local_workbooks([broken_workbook])
     corrupt_cache = joinpath(mktempdir(), "bad-parsed-cache.bin")
     write(corrupt_cache, "not serialized data")
     @test AusStats._read_parsed_cache(corrupt_cache, (; parser_version=1)) === nothing
@@ -150,6 +155,11 @@
     @test "date" ∉ names(metadata)
     @test "value" ∉ names(metadata)
     @test unique(metadata.source_workbook) == [abspath(workbook)]
+
+    sample_workbook(joinpath(default_cache_dir(), "workbooks", selected.filename))
+    catalogue_metadata = read_metadata("6202.0"; tables=1)
+    @test nrow(catalogue_metadata) == 2
+    @test unique(catalogue_metadata.cat_no) == ["6202.0"]
 
     metadata_path = metadata_layout_workbook()
     layouts = read_metadata(metadata_path)

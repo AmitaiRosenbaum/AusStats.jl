@@ -71,6 +71,25 @@ function cube_workbook(path=tempname() * ".xlsx")
     return path
 end
 
+function multi_sheet_cube_workbook(path=tempname() * ".xlsx")
+    mkpath(dirname(path))
+    XLSX.openxlsx(path, mode="w") do xf
+        sheet = xf[1]
+        XLSX.rename!(sheet, "Cube 1")
+        sheet["A1"] = "State"
+        sheet["B1"] = "Value"
+        sheet["A2"] = "NSW"
+        sheet["B2"] = 1.0
+
+        sheet = XLSX.addsheet!(xf, "Cube 2")
+        sheet["A1"] = "State"
+        sheet["B1"] = "Value"
+        sheet["A2"] = "VIC"
+        sheet["B2"] = 2.0
+    end
+    return path
+end
+
 function labelled_cube_workbook(path=tempname() * ".xlsx")
     mkpath(dirname(path))
     XLSX.openxlsx(path, mode="w") do xf

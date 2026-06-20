@@ -743,6 +743,7 @@ function _infer_release_value(rows)
                 text = _clean_text(value)
                 isempty(text) || return _normalise_release_text(text)
             end
+            continue
         end
 
         for value in row

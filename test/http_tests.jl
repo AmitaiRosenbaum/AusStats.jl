@@ -1,5 +1,6 @@
 @testset "HTTP wrappers" begin
     workbook = sample_workbook()
+    cube = cube_workbook()
     server = HTTP.serve!(listenany=true) do request
         target = string(request.target)
         if startswith(target, "/json")
@@ -24,6 +25,8 @@
             return HTTP.Response(200, ["Content-Type" => "application/json"], body="{")
         elseif startswith(target, "/jul-2026/workbook.xlsx")
             return HTTP.Response(200, ["Content-Type" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"], body=read(workbook))
+        elseif startswith(target, "/jul-2026/cube.xlsx")
+            return HTTP.Response(200, ["Content-Type" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"], body=read(cube))
         end
         return HTTP.Response(200, "hello")
     end
@@ -74,6 +77,11 @@
         metadata = read_metadata(workbook_url; tables=1)
         @test nrow(metadata) == 2
         @test all(metadata.release_date .== "jul-2026")
+
+        cube_url = base * "/jul-2026/cube.xlsx"
+        cube_rows = read_cube(cube_url; cache=false, family=:generic)
+        @test nrow(cube_rows) == 2
+        @test all(isfile, cube_rows.source_file)
     finally
         close(server)
     end
