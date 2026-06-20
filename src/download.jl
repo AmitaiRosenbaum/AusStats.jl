@@ -854,9 +854,11 @@ function _table_no_from_filename(cat_no::AbstractString, url::AbstractString)
     digits = replace(cat_no, r"\D" => "")
     m = match(Regex("^" * digits * "0*([0-9]{1,3}[a-z]?)", "i"), lowercase(stem))
     m === nothing && return nothing
-    parsed = tryparse(Int, replace(m.captures[1], r"[A-Za-z]" => ""))
-    parsed === nothing && return lowercase(m.captures[1])
-    suffix = replace(lowercase(m.captures[1]), r"[0-9]" => "")
+    table = m.captures[1]
+    table === nothing && return nothing
+    parsed = tryparse(Int, replace(table, r"[A-Za-z]" => ""))
+    parsed === nothing && return lowercase(table)
+    suffix = replace(lowercase(table), r"[0-9]" => "")
     return string(parsed) * suffix
 end
 
@@ -876,12 +878,16 @@ function _release_date_from_text(value::AbstractString)
     text = lowercase(_clean_discovery_text(value))
     m = match(r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*[- ]+([0-9]{4})\b", text)
     if m !== nothing
-        return Date(parse(Int, m.captures[2]), _release_month_number(m.captures[1]), 1)
+        month_text, year_text = m.captures
+        (month_text === nothing || year_text === nothing) && return nothing
+        return Date(parse(Int, year_text), _release_month_number(month_text), 1)
     end
 
     m = match(r"\b([0-9]{4})[- ]+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b", text)
     if m !== nothing
-        return Date(parse(Int, m.captures[1]), _release_month_number(m.captures[2]), 1)
+        year_text, month_text = m.captures
+        (month_text === nothing || year_text === nothing) && return nothing
+        return Date(parse(Int, year_text), _release_month_number(month_text), 1)
     end
 
     return nothing
