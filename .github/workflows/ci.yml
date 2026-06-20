@@ -41,8 +41,12 @@ jobs:
       - uses: julia-actions/julia-processcoverage@v1
         if: matrix.os == 'ubuntu-latest' && matrix.version == '1.10'
 
-      - uses: codecov/codecov-action@v5
+      - uses: codecov/codecov-action@v6
         if: matrix.os == 'ubuntu-latest' && matrix.version == '1.10' && github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         with:
-          files: lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./lcov.info
+          flags: julia
+          name: julia-${{ github.run_id }}
+          fail_ci_if_error: true
+          verbose: true
