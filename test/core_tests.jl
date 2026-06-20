@@ -156,7 +156,25 @@
     @test "value" ∉ names(metadata)
     @test unique(metadata.source_workbook) == [abspath(workbook)]
 
-    sample_workbook(joinpath(default_cache_dir(), "workbooks", selected.filename))
+    deterministic_6202 = AusStats._file_rows_dataframe([
+        AusStats._file_row(;
+            cat_no="6202.0",
+            title="Labour Force, Australia",
+            description="Deterministic test workbook.",
+            page_url="https://example.test/6202.0",
+            release_date="apr-2026",
+            file_title="Table 1. Deterministic labour force workbook",
+            url="https://example.test/6202_table1.xlsx",
+            filename="6202_table1.xlsx",
+            file_type="xlsx",
+            table_no="1",
+            table_title="Table 1. Deterministic labour force workbook",
+            is_timeseries=true,
+            is_cube=false,
+        ),
+    ])
+    AusStats._write_index(deterministic_6202)
+    sample_workbook(joinpath(default_cache_dir(), "workbooks", "6202_table1.xlsx"))
     catalogue_metadata = read_metadata("6202.0"; tables=1)
     @test nrow(catalogue_metadata) == 2
     @test unique(catalogue_metadata.cat_no) == ["6202.0"]
@@ -219,7 +237,6 @@
     @test_throws ArgumentError separate_series(split_sample; names=[:only_one])
     @test latest_date(tidy) == Date(2026, 5, 1)
 
-    sample_workbook(joinpath(default_cache_dir(), "workbooks", selected.filename))
     series = read_series(["a84423043a"]; cat_no="6202.0")
     @test nrow(series) == 2
     @test unique(series.series_id) == ["A84423043A"]
