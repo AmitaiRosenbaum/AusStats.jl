@@ -471,7 +471,7 @@ function _read_rba_balance_sheet_html(
 )
     text = read(path, String)
     doc = _parse_html(text)
-    page_text = _clean_discovery_text(_html_text(doc))
+    page_text = _clean_discovery_text(_html_text(EzXML.root(doc)))
     as_at = _rba_balance_sheet_date(page_text)
     rows = _rba_balance_sheet_rows(page_text)
     out = DataFrame(;
@@ -610,7 +610,7 @@ function _rba_series_label(series::AbstractString)
 end
 
 function _rba_table_id(label::AbstractString, url::AbstractString)
-    for text in (basename(split(url, '?'; limit=2)[1]), label)
+    for text in (label, basename(split(url, '?'; limit=2)[1]))
         match_value = match(r"(?i)\b([a-z]\d+(?:\.\d+)*)\b", text)
         match_value === nothing || return uppercase(match_value.captures[1])
     end
@@ -672,6 +672,10 @@ function _rba_balance_sheet_rows(text::AbstractString)
     rows = NamedTuple[]
     for (index, match_value) in enumerate(matches)
         item = strip(match_value.captures[1])
+        item = replace(
+            item,
+            r"^Liabilities and Equity Movement Assets Movement\s+"i => "",
+        )
         value = _parse_abs_float(match_value.captures[2])
         movement = _parse_abs_float(match_value.captures[3])
         side = index <= cld(length(matches), 2) ? "liabilities_and_equity" : "assets"
