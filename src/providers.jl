@@ -4,14 +4,19 @@ struct ABSProvider <: AbstractProvider end
 
 struct RBAProvider <: AbstractProvider end
 
+struct APRAProvider <: AbstractProvider end
+
 const _PROVIDERS = Dict{Symbol, AbstractProvider}(
     :abs => ABSProvider(),
+    :apra => APRAProvider(),
     :rba => RBAProvider(),
 )
 
 provider_id(::ABSProvider) = :abs
+provider_id(::APRAProvider) = :apra
 provider_id(::RBAProvider) = :rba
 provider_name(::ABSProvider) = "Australian Bureau of Statistics"
+provider_name(::APRAProvider) = "Australian Prudential Regulation Authority"
 provider_name(::RBAProvider) = "Reserve Bank of Australia"
 
 function _provider(provider)

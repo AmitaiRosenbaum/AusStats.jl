@@ -26,6 +26,7 @@ export dataflows, datastructure, api_key, read_api, read_api_url
 export providers, datasets, datafiles, search_data, download_data, read_data
 export search_rba, rba_tables, rba_files, download_rba, read_rba
 export read_rba_cash_rate, read_rba_balance_sheet
+export search_apra, apra_publications, apra_files, download_apra, read_apra
 export default_cache_dir, cache_info, clear_cache!
 
 include("cache.jl")
@@ -39,5 +40,6 @@ include("cube.jl")
 include("convenience.jl")
 include("api.jl")
 include("rba.jl")
+include("apra.jl")
 
 end
