@@ -1,4 +1,7 @@
 @testset "Provider API" begin
+    rba_index_path = AusStats._rba_index_path()
+    isfile(rba_index_path) && rm(rba_index_path)
+
     provider_rows = providers()
     @test Set(provider_rows.provider) == Set([:abs, :apra, :rba])
     @test nrow(datasets(:abs)) >= 1
@@ -109,4 +112,111 @@ end
     @test "Australian notes on issue" in balance.item
     @test "Gold and foreign exchange" in balance.item
     @test balance.value[balance.item .== "Gold and foreign exchange"] == [113526.0]
+end
+
+@testset "RBA provider edge paths" begin
+    @test nrow(search_data("cash")) >= 1
+    @test nrow(datafiles(:rba, "cash-rate-target")) == 1
+    @test AusStats._rba_table_title("Assets and Liabilities - B11.1", "B11.1") ==
+        "Assets and Liabilities"
+    @test AusStats._rba_table_id("No table id", "https://www.rba.gov.au/statistics/tables/") ===
+        nothing
+    @test AusStats._parse_rba_date("2026") == Date(2026, 1, 1)
+    @test AusStats._parse_rba_date("not a date") === nothing
+    @test AusStats._infer_frequency_from_dates(Date(2026, 1, 2)) == "daily"
+
+    html_path = tempname() * ".html"
+    write(
+        html_path,
+        """
+        <html><body><table>
+          <tr><th>Date</th><th>Value</th></tr>
+          <tr><td>2026-01-01</td><td>1.0</td></tr>
+        </table></body></html>
+        """,
+    )
+    html = AusStats._read_rba_file(
+        html_path;
+        metadata=(dataset_id="html-fixture", title="HTML fixture", source_url="fixture"),
+    )
+    @test nrow(html) == 1
+    @test html.provider == fill(:rba, 1)
+    @test html.dataset_id == ["html-fixture"]
+
+    rows = AusStats._provider_file_rows([
+        AusStats._provider_file_row(;
+            provider=:rba,
+            dataset_id="local-rba",
+            title="Local RBA",
+            description="Local RBA fixture",
+            page_url="http://127.0.0.1/local-rba",
+            release_date="",
+            file_id="csv",
+            file_title="Local CSV",
+            url="http://127.0.0.1:1/local-rba.csv",
+            filename="local-rba.csv",
+            file_type="csv",
+            resource_kind=:timeseries,
+        ),
+        AusStats._provider_file_row(;
+            provider=:rba,
+            dataset_id="local-rba",
+            title="Local RBA",
+            description="Local RBA fixture",
+            page_url="http://127.0.0.1/local-rba",
+            release_date="",
+            file_id="html",
+            file_title="Local HTML",
+            url="http://127.0.0.1:1/local-rba.html",
+            filename="local-rba.html",
+            file_type="html",
+            resource_kind=:html,
+        ),
+    ])
+    AusStats._write_rba_index(rows)
+    @test isequal(AusStats._read_rba_index(), rows)
+    @test_throws ArgumentError AusStats._select_rba_file("local-rba"; file="missing")
+    @test_throws ArgumentError AusStats._select_rba_file("missing-rba")
+
+    server = HTTP.serve!(; listenany=true) do request
+        target = string(request.target)
+        if target == "/local-rba.csv"
+            return HTTP.Response(
+                200;
+                body="Date,Target cash rate\n2026-01-01,4.35\n",
+            )
+        elseif target == "/local-rba.html"
+            return HTTP.Response(
+                200;
+                body="<html><body><table><tr><th>Date</th><th>Value</th></tr><tr><td>2026-01-01</td><td>1</td></tr></table></body></html>",
+            )
+        end
+        return HTTP.Response(404, "missing")
+    end
+
+    try
+        base = "http://127.0.0.1:$(HTTP.port(server))"
+        live_rows = copy(rows)
+        live_rows.url = replace.(live_rows.url, "http://127.0.0.1:1" => base)
+        AusStats._write_rba_index(live_rows)
+
+        cached_dir = mktempdir()
+        cached_html = joinpath(cached_dir, "rba", "local-rba.html")
+        mkpath(dirname(cached_html))
+        touch(cached_html)
+        @test download_rba("local-rba"; file="html", dest=cached_dir) == cached_html
+
+        csv = read_rba(base * "/local-rba.csv"; cache=false)
+        @test nrow(csv) == 1
+        @test csv.value == [4.35]
+
+        from_id = read_rba("local-rba"; file="csv", cache=false)
+        @test nrow(from_id) == 1
+        @test unique(from_id.table_id) == ["local-rba"]
+
+        html_from_url = read_rba(base * "/local-rba.html"; cache=false)
+        @test nrow(html_from_url) == 1
+    finally
+        close(server)
+    end
 end

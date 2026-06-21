@@ -165,3 +165,127 @@ end
     @test isequal(cached, rows)
     @test only(apra_files("fixture")).file_title == "Fixture file"
 end
+
+@testset "APRA URL and provider edge paths" begin
+    apra_index_path = AusStats._apra_index_path()
+    isfile(apra_index_path) && rm(apra_index_path)
+
+    @test nrow(search_data("deposit-taking")) >= 1
+    @test nrow(search_data("deposit-taking"; provider=nothing)) >= 1
+    @test nrow(AusStats._empty_provider_file_rows()) == 0
+    @test nrow(datafiles(:abs, "6202.0"; release="apr-2026")) >= 1
+    AusStats._write_release_index("6345.0", archive_fixture_releases())
+    AusStats._write_release_file_index(
+        "6345.0", Date(2019, 9, 1), historical_release_fixture_rows()
+    )
+    @test nrow(datafiles(:abs, "6345.0"; release=Date(2019, 9, 1))) >= 1
+    @test_throws ArgumentError datafiles(:abs; release=Date(2026, 4, 1))
+
+    unsupported = tempname() * ".txt"
+    write(unsupported, "unsupported")
+    @test_throws ArgumentError read_apra(unsupported)
+
+    rows = AusStats._provider_file_rows([
+        AusStats._provider_file_row(;
+            provider=:apra,
+            dataset_id="local-apra",
+            title="Local APRA",
+            description="Local APRA fixture",
+            page_url="http://127.0.0.1/local-apra",
+            release_date="1 January 2026",
+            file_id="xlsx",
+            file_title="Local APRA workbook",
+            url="http://127.0.0.1:1/local-apra.xlsx",
+            filename="local-apra.xlsx",
+            file_type="xlsx",
+            resource_kind=:dataset,
+        ),
+        AusStats._provider_file_row(;
+            provider=:apra,
+            dataset_id="local-apra",
+            title="Local APRA",
+            description="Local APRA fixture",
+            page_url="http://127.0.0.1/local-apra",
+            release_date="1 January 2026",
+            file_id="html",
+            file_title="Local APRA HTML",
+            url="http://127.0.0.1:1/local-apra.html",
+            filename="local-apra.html",
+            file_type="html",
+            resource_kind=:dataset,
+        ),
+        AusStats._provider_file_row(;
+            provider=:apra,
+            dataset_id="local-apra-doc",
+            title="Local APRA document",
+            description="Local APRA document fixture",
+            page_url="http://127.0.0.1/local-apra-doc",
+            release_date="1 January 2026",
+            file_id="pdf",
+            file_title="Local APRA PDF",
+            url="http://127.0.0.1:1/local-apra.pdf",
+            filename="local-apra.pdf",
+            file_type="pdf",
+            resource_kind=:document,
+        ),
+    ])
+
+    workbook = tempname() * ".xlsx"
+    XLSX.openxlsx(workbook; mode="w") do xf
+        sheet = xf[1]
+        XLSX.rename!(sheet, "Data")
+        sheet["A1"] = "Period"
+        sheet["B1"] = "Value"
+        sheet["A2"] = "Mar-2026"
+        sheet["B2"] = 9.0
+    end
+    workbook_bytes = read(workbook)
+
+    server = HTTP.serve!(; listenany=true) do request
+        target = string(request.target)
+        if target == "/local-apra.xlsx"
+            return HTTP.Response(200; body=workbook_bytes)
+        elseif target == "/local-apra.csv"
+            return HTTP.Response(200; body="Period,Value\nMar-2026,8\n")
+        elseif target == "/local-apra.html"
+            return HTTP.Response(
+                200;
+                body="<html><body><table><tr><th>Period</th><th>Value</th></tr><tr><td>Mar-2026</td><td>7</td></tr></table></body></html>",
+            )
+        end
+        return HTTP.Response(404, "missing")
+    end
+
+    try
+        base = "http://127.0.0.1:$(HTTP.port(server))"
+        live_rows = copy(rows)
+        live_rows.url = replace.(live_rows.url, "http://127.0.0.1:1" => base)
+        AusStats._write_apra_index(live_rows)
+
+        cached_dir = mktempdir()
+        cached_html = joinpath(cached_dir, "apra", "local-apra.html")
+        mkpath(dirname(cached_html))
+        touch(cached_html)
+        @test download_apra("local-apra"; file="html", dest=cached_dir) == cached_html
+
+        from_url = read_apra(base * "/local-apra.xlsx"; cache=false)
+        @test nrow(from_url) == 1
+        @test from_url.Value == [9.0]
+
+        from_csv_url = read_apra(base * "/local-apra.csv"; cache=false)
+        @test nrow(from_csv_url) == 1
+        @test from_csv_url.Value == [8]
+
+        from_id = read_apra("local-apra"; file="xlsx", cache=false)
+        @test nrow(from_id) == 1
+        @test unique(from_id.publication_id) == ["local-apra"]
+
+        from_html_id = read_apra("local-apra"; file="html", cache=false)
+        @test nrow(from_html_id) == 1
+        @test from_html_id.Value == ["7"]
+
+        @test_throws ArgumentError read_apra("local-apra-doc"; file="pdf")
+    finally
+        close(server)
+    end
+end
