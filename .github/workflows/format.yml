@@ -7,7 +7,7 @@ on:
   pull_request:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: format-${{ github.ref }}
@@ -21,6 +21,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
 
       - uses: julia-actions/setup-julia@v3
         with:
@@ -35,5 +38,11 @@ jobs:
           Pkg.develop(PackageSpec(path=pwd()))
           Pkg.instantiate()
 
-      - name: Check formatting
-        run: julia --color=yes --project=quality quality/format.jl
+      - name: Format Julia files
+        run: julia --color=yes --project=quality quality/format.jl --fix
+
+      - name: Commit formatting changes
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: stefanzweifel/git-auto-commit-action@v7
+        with:
+          commit_message: style: fix Julia formatting
