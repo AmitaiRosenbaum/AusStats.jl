@@ -41,6 +41,7 @@
     mkpath(dirname(cached_path))
     touch(cached_path)
     @test download_abs("6202.0"; dest=cache_dir) == cached_path
+    @test download_data(:abs, "6202.0"; dest=cache_dir) == cached_path
 
     historical_selected = AusStats._select_file(
         "6345.0"; release=Date(2019, 9, 1), cube=false
@@ -103,6 +104,7 @@
     @test read_abs_local(workbook) isa DataFrame
     @test "source_file" ∉ names(read_abs_local(workbook))
     @test read_abs(workbook) isa DataFrame
+    @test read_data(:abs, workbook; file=1) isa DataFrame
     @test read_abs(workbook; tidy=false) isa DataFrame
     @test unique(read_abs(workbook; tables=["1"]).table) == ["Data1"]
     @test unique(read_abs(workbook; tables=["Table 1"]).table) == ["Data1"]

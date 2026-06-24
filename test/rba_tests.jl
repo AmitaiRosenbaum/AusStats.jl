@@ -4,9 +4,13 @@
 
     provider_rows = providers()
     @test Set(provider_rows.provider) == Set([:abs, :apra, :rba])
+    @test AusStats.provider_id(AusStats._provider(" RBA ")) == :rba
+    @test AusStats.provider_name(AusStats._provider(:apra)) ==
+        "Australian Prudential Regulation Authority"
     @test nrow(datasets(:abs)) >= 1
     @test nrow(datafiles(:abs, "6202.0")) >= 1
     @test nrow(search_data("labour"; provider=:abs)) >= 1
+    @test issubset(Set([:abs, :apra, :rba]), Set(search_data("").provider))
     @test nrow(datasets(:rba)) >= 1
     @test nrow(search_data("cash"; provider=:rba)) >= 1
     @test_throws ArgumentError datasets(:missing)
@@ -22,6 +26,7 @@ end
 
     html = """
     <html><body>
+      <a href="/statistics/tables/b11-1.html">Assets & Liabilities of Australian-located Operations - B11.1</a>
       <a href="/statistics/tables/xls/b11-1-hist.xlsx">Assets & Liabilities of Australian-located Operations - B11.1</a>
       <a href="/statistics/tables/csv/b11-1-data.csv">Data</a>
       <a href="/statistics/tables/csv/f1-data.csv">F1 - Data</a>
@@ -78,7 +83,9 @@ end
     )
     cash = AusStats._read_rba_file(
         cash_html;
-        metadata=(dataset_id="cash-rate-target", title="Cash Rate Target", source_url="fixture"),
+        metadata=(
+            dataset_id="cash-rate-target", title="Cash Rate Target", source_url="fixture"
+        ),
     )
     @test nrow(cash) == 2
     @test cash.effective_date == [Date(2026, 6, 17), Date(2026, 5, 6)]
@@ -119,11 +126,33 @@ end
     @test nrow(datafiles(:rba, "cash-rate-target")) == 1
     @test AusStats._rba_table_title("Assets and Liabilities - B11.1", "B11.1") ==
         "Assets and Liabilities"
-    @test AusStats._rba_table_id("No table id", "https://www.rba.gov.au/statistics/tables/") ===
-        nothing
+    @test AusStats._rba_table_title("B11.1", "B11.1") == "B11.1"
+    @test AusStats._rba_table_id(
+        "No table id", "https://www.rba.gov.au/statistics/tables/"
+    ) === nothing
+    @test AusStats._looks_like_rba_table_page(
+        "https://www.rba.gov.au/statistics/tables/b11-1.html", "B11.1"
+    )
+    @test !AusStats._looks_like_rba_table_page("https://www.rba.gov.au/about/", "B11.1")
+    @test AusStats._parse_rba_date(missing) === nothing
+    @test AusStats._parse_rba_date(DateTime(2026, 1, 2, 3)) == Date(2026, 1, 2)
+    @test AusStats._parse_rba_date("") === nothing
     @test AusStats._parse_rba_date("2026") == Date(2026, 1, 1)
     @test AusStats._parse_rba_date("not a date") === nothing
     @test AusStats._infer_frequency_from_dates(Date(2026, 1, 2)) == "daily"
+    @test AusStats._rba_balance_sheet_date("No balance sheet date") === nothing
+    @test isempty(AusStats._rba_balance_sheet_rows("No balance sheet segment"))
+
+    empty_csv_path = tempname() * ".csv"
+    write(empty_csv_path, "")
+    @test isempty(AusStats._read_rba_csv(empty_csv_path))
+
+    fallback_csv_path = tempname() * ".csv"
+    write(fallback_csv_path, "Observation,Value\nnot a date,1\n")
+    @test AusStats._rba_csv_header_index(["metadata", "Observation,Value"]) == 1
+    @test AusStats._rba_date_column(DataFrame(; Observation=["not a date"], Value=[1])) ==
+        "Observation"
+    @test isempty(AusStats._read_rba_csv(fallback_csv_path))
 
     html_path = tempname() * ".html"
     write(
@@ -142,6 +171,14 @@ end
     @test nrow(html) == 1
     @test html.provider == fill(:rba, 1)
     @test html.dataset_id == ["html-fixture"]
+
+    empty_html_path = tempname() * ".html"
+    write(empty_html_path, "<html><body>No tables</body></html>")
+    @test isempty(AusStats._read_rba_file(empty_html_path))
+
+    unsupported_path = tempname() * ".txt"
+    write(unsupported_path, "unsupported")
+    @test_throws ArgumentError AusStats._read_rba_file(unsupported_path)
 
     rows = AusStats._provider_file_rows([
         AusStats._provider_file_row(;
@@ -181,10 +218,7 @@ end
     server = HTTP.serve!(; listenany=true) do request
         target = string(request.target)
         if target == "/local-rba.csv"
-            return HTTP.Response(
-                200;
-                body="Date,Target cash rate\n2026-01-01,4.35\n",
-            )
+            return HTTP.Response(200; body="Date,Target cash rate\n2026-01-01,4.35\n")
         elseif target == "/local-rba.html"
             return HTTP.Response(
                 200;
@@ -205,17 +239,33 @@ end
         mkpath(dirname(cached_html))
         touch(cached_html)
         @test download_rba("local-rba"; file="html", dest=cached_dir) == cached_html
+        @test download_data(:rba, "local-rba"; file="html", dest=cached_dir) == cached_html
+        cached_csv = joinpath(cached_dir, "rba", "local-rba.csv")
+        mkpath(dirname(cached_csv))
+        touch(cached_csv)
+        @test download_rba("local-rba"; file="csv", dest=cached_dir) == cached_csv
 
         csv = read_rba(base * "/local-rba.csv"; cache=false)
         @test nrow(csv) == 1
         @test csv.value == [4.35]
 
+        cached_from_id = read_rba("local-rba"; file="csv")
+        @test nrow(cached_from_id) == 1
+        @test unique(cached_from_id.table_id) == ["local-rba"]
+
         from_id = read_rba("local-rba"; file="csv", cache=false)
         @test nrow(from_id) == 1
         @test unique(from_id.table_id) == ["local-rba"]
 
+        via_provider = read_data(:rba, "local-rba"; file="csv", cache=false)
+        @test nrow(via_provider) == 1
+        @test unique(via_provider.table_id) == ["local-rba"]
+
         html_from_url = read_rba(base * "/local-rba.html"; cache=false)
         @test nrow(html_from_url) == 1
+
+        html_from_id = read_rba("local-rba"; file="html", cache=false)
+        @test nrow(html_from_id) == 1
     finally
         close(server)
     end

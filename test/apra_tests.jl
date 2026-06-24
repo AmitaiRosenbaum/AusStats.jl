@@ -8,7 +8,9 @@
     @test nrow(apra_files("monthly-authorised-deposit-taking-institution-statistics")) >= 2
     @test nrow(search_apra("deposit-taking")) >= 1
     @test nrow(datasets(:apra)) >= 2
-    @test nrow(datafiles(:apra, "quarterly-authorised-deposit-taking-institution-statistics")) >= 2
+    @test nrow(
+        datafiles(:apra, "quarterly-authorised-deposit-taking-institution-statistics")
+    ) >= 2
     @test nrow(search_data("centralised"; provider=:apra)) >= 1
 end
 
@@ -267,6 +269,8 @@ end
         mkpath(dirname(cached_html))
         touch(cached_html)
         @test download_apra("local-apra"; file="html", dest=cached_dir) == cached_html
+        @test download_data(:apra, "local-apra"; file="html", dest=cached_dir) ==
+            cached_html
 
         from_url = read_apra(base * "/local-apra.xlsx"; cache=false)
         @test nrow(from_url) == 1
@@ -276,9 +280,17 @@ end
         @test nrow(from_csv_url) == 1
         @test from_csv_url.Value == [8]
 
+        cached_from_id = read_apra("local-apra"; file="xlsx")
+        @test nrow(cached_from_id) == 1
+        @test unique(cached_from_id.publication_id) == ["local-apra"]
+
         from_id = read_apra("local-apra"; file="xlsx", cache=false)
         @test nrow(from_id) == 1
         @test unique(from_id.publication_id) == ["local-apra"]
+
+        via_provider = read_data(:apra, "local-apra"; file="xlsx", cache=false)
+        @test nrow(via_provider) == 1
+        @test unique(via_provider.publication_id) == ["local-apra"]
 
         from_html_id = read_apra("local-apra"; file="html", cache=false)
         @test nrow(from_html_id) == 1
