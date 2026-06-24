@@ -164,36 +164,41 @@ function read_apra(
 
     refresh && apra_files(source; refresh=true)
     row = _select_apra_file(source; file)
-    row.resource_kind == :document &&
-        throw(ArgumentError("APRA file `$(row.file_title)` is a document, not a readable data file"))
+    row.resource_kind == :document && throw(
+        ArgumentError(
+            "APRA file `$(row.file_title)` is a document, not a readable data file"
+        ),
+    )
     path = if cache
         download_apra(source; file)
     else
         _download_apra_url(row.url; dest=mktempdir(), filename=row.filename, force=true)
     end
     return _read_apra_file(
-        path;
-        metadata=_apra_metadata(row),
-        source_url=row.url,
-        cache_parsed,
-        refresh,
+        path; metadata=_apra_metadata(row), source_url=row.url, cache_parsed, refresh
     )
 end
 
 _datasets(::APRAProvider; refresh::Bool=false) = apra_publications(; refresh)
-_datafiles(::APRAProvider, dataset_id=nothing; refresh::Bool=false, release=nothing) =
-    apra_files(dataset_id; refresh)
-_search_data(::APRAProvider, query::AbstractString; refresh::Bool=false) =
-    search_apra(query; refresh)
-_download_data(
+function _datafiles(
+    ::APRAProvider, dataset_id=nothing; refresh::Bool=false, release=nothing
+)
+    return apra_files(dataset_id; refresh)
+end
+function _search_data(::APRAProvider, query::AbstractString; refresh::Bool=false)
+    return search_apra(query; refresh)
+end
+function _download_data(
     ::APRAProvider,
     dataset_id::AbstractString;
     file=nothing,
     release=:latest,
     dest::AbstractString=default_cache_dir(),
     force::Bool=false,
-) = download_apra(dataset_id; file, dest, force)
-_read_data(
+)
+    return download_apra(dataset_id; file, dest, force)
+end
+function _read_data(
     ::APRAProvider,
     source::AbstractString;
     file=nothing,
@@ -201,7 +206,9 @@ _read_data(
     cache::Bool=true,
     cache_parsed::Bool=true,
     refresh::Bool=false,
-) = read_apra(source; file, cache, cache_parsed, refresh)
+)
+    return read_apra(source; file, cache, cache_parsed, refresh)
+end
 
 function _apra_index(; refresh::Bool=false)
     refresh && return refresh_apra!()
@@ -401,7 +408,9 @@ function _download_apra_url(
     if endswith(lower, ".html") || endswith(lower, ".htm")
         return _download_text_file(url; dest, filename, force)
     end
-    return _download_file(url; dest, filename=something(filename, _url_filename(url)), force)
+    return _download_file(
+        url; dest, filename=something(filename, _url_filename(url)), force
+    )
 end
 
 function _read_apra_file(
@@ -412,9 +421,7 @@ function _read_apra_file(
     refresh::Bool=false,
 )
     options = (metadata=metadata, source_url=source_url)
-    return _with_parsed_cache(
-        path; kind=:read_apra, options, cache_parsed, refresh
-    ) do
+    return _with_parsed_cache(path; kind=:read_apra, options, cache_parsed, refresh) do
         lower = lowercase(path)
         if endswith(lower, ".xlsx") || endswith(lower, ".xls")
             return _read_apra_workbook(path; metadata, source_url)
@@ -425,11 +432,17 @@ function _read_apra_file(
         elseif endswith(lower, ".pdf")
             throw(ArgumentError("APRA PDF files can be downloaded but not read as data"))
         end
-        throw(ArgumentError("unsupported APRA file type for `$path`; expected XLSX, CSV, or HTML"))
+        throw(
+            ArgumentError(
+                "unsupported APRA file type for `$path`; expected XLSX, CSV, or HTML"
+            ),
+        )
     end
 end
 
-function _read_apra_workbook(path::AbstractString; metadata=_apra_metadata(), source_url=missing)
+function _read_apra_workbook(
+    path::AbstractString; metadata=_apra_metadata(), source_url=missing
+)
     out = DataFrame()
     XLSX.openxlsx(path) do xf
         for sheetname in XLSX.sheetnames(xf)
@@ -453,7 +466,9 @@ function _read_apra_csv(path::AbstractString; metadata=_apra_metadata(), source_
     return table
 end
 
-function _read_apra_html(path::AbstractString; metadata=_apra_metadata(), source_url=missing)
+function _read_apra_html(
+    path::AbstractString; metadata=_apra_metadata(), source_url=missing
+)
     df = DataFrame(_html_table_rows(_parse_html(read(path, String))))
     isempty(df) && return df
     _add_apra_provenance!(df, missing, path, metadata, source_url)
@@ -466,18 +481,15 @@ function _add_apra_provenance!(table::DataFrame, sheet, path, metadata, source_u
     table[!, :publication_title] = fill(metadata.title, nrow(table))
     table[!, :file_title] = fill(metadata.file_title, nrow(table))
     table[!, :sheet] = fill(sheet, nrow(table))
-    table[!, :source_url] = fill(ismissing(source_url) ? metadata.source_url : source_url, nrow(table))
+    table[!, :source_url] = fill(
+        ismissing(source_url) ? metadata.source_url : source_url, nrow(table)
+    )
     table[!, :source_file] = fill(abspath(path), nrow(table))
     return table
 end
 
 function _apra_metadata(row=nothing)
-    row === nothing && return (
-        dataset_id="",
-        title="",
-        file_title="",
-        source_url=missing,
-    )
+    row === nothing && return (dataset_id="", title="", file_title="", source_url=missing)
     return (
         dataset_id=String(row.dataset_id),
         title=String(row.title),
@@ -518,7 +530,9 @@ function _apra_file_title(label::AbstractString, url::AbstractString)
 end
 
 function _apra_description(page_text::AbstractString, fallback::AbstractString)
-    match_value = match(r"Print\s+(.*?)\s+([A-Z][A-Za-z ]+ XLSX|[A-Z][A-Za-z ]+ PDF|##|###)", page_text)
+    match_value = match(
+        r"Print\s+(.*?)\s+([A-Z][A-Za-z ]+ XLSX|[A-Z][A-Za-z ]+ PDF|##|###)", page_text
+    )
     match_value === nothing && return fallback
     description = strip(match_value.captures[1])
     return isempty(description) ? fallback : description

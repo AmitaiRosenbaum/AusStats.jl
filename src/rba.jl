@@ -132,11 +132,7 @@ function read_rba(
         _download_file(row.url; dest=mktempdir(), filename=row.filename, force=true)
     end
     return _read_rba_file(
-        path;
-        metadata=_rba_metadata(row),
-        source_url=row.url,
-        cache_parsed,
-        refresh,
+        path; metadata=_rba_metadata(row), source_url=row.url, cache_parsed, refresh
     )
 end
 
@@ -159,19 +155,23 @@ function read_rba_balance_sheet(; refresh::Bool=false, cache_parsed::Bool=true)
 end
 
 _datasets(::RBAProvider; refresh::Bool=false) = rba_tables(; refresh)
-_datafiles(::RBAProvider, dataset_id=nothing; refresh::Bool=false, release=nothing) =
-    rba_files(dataset_id; refresh)
-_search_data(::RBAProvider, query::AbstractString; refresh::Bool=false) =
-    search_rba(query; refresh)
-_download_data(
+function _datafiles(::RBAProvider, dataset_id=nothing; refresh::Bool=false, release=nothing)
+    return rba_files(dataset_id; refresh)
+end
+function _search_data(::RBAProvider, query::AbstractString; refresh::Bool=false)
+    return search_rba(query; refresh)
+end
+function _download_data(
     ::RBAProvider,
     dataset_id::AbstractString;
     file=nothing,
     release=:latest,
     dest::AbstractString=default_cache_dir(),
     force::Bool=false,
-) = download_rba(dataset_id; file, dest, force)
-_read_data(
+)
+    return download_rba(dataset_id; file, dest, force)
+end
+function _read_data(
     ::RBAProvider,
     source::AbstractString;
     file=nothing,
@@ -179,7 +179,9 @@ _read_data(
     cache::Bool=true,
     cache_parsed::Bool=true,
     refresh::Bool=false,
-) = read_rba(source; file, cache, cache_parsed, refresh)
+)
+    return read_rba(source; file, cache, cache_parsed, refresh)
+end
 
 function _rba_index(; refresh::Bool=false)
     refresh && return refresh_rba!()
@@ -225,9 +227,8 @@ function _discover_rba_tables(doc)
         data_id === nothing && continue
         title = current === nothing ? data_id : current.title
         page_url = current === nothing ? RBA_TABLES_URL : current.page_url
-        file_title = _generic_download_label(label) || lowercase(label) == "data" ?
-            title :
-            label
+        file_title =
+            _generic_download_label(label) || lowercase(label) == "data" ? title : label
         push!(
             rows,
             _provider_file_row(;
@@ -382,9 +383,7 @@ function _read_rba_file(
     refresh::Bool=false,
 )
     options = (metadata=metadata, source_url=source_url)
-    return _with_parsed_cache(
-        path; kind=:read_rba, options, cache_parsed, refresh
-    ) do
+    return _with_parsed_cache(path; kind=:read_rba, options, cache_parsed, refresh) do
         lower = lowercase(path)
         if metadata.dataset_id == "cash-rate-target"
             return _read_rba_cash_rate_html(path; metadata, source_url)
@@ -437,7 +436,9 @@ function _read_rba_csv(path::AbstractString; metadata=_rba_metadata(), source_ur
     return out
 end
 
-function _read_rba_cash_rate_html(path::AbstractString; metadata=_rba_metadata(), source_url=missing)
+function _read_rba_cash_rate_html(
+    path::AbstractString; metadata=_rba_metadata(), source_url=missing
+)
     text = read(path, String)
     rows = _rba_cash_rate_rows(text)
     out = DataFrame(;
@@ -506,14 +507,18 @@ function _read_rba_balance_sheet_html(
     return out
 end
 
-function _read_rba_html_tables(path::AbstractString; metadata=_rba_metadata(), source_url=missing)
+function _read_rba_html_tables(
+    path::AbstractString; metadata=_rba_metadata(), source_url=missing
+)
     doc = _parse_html(read(path, String))
     rows = _html_table_rows(doc)
     df = DataFrame(rows)
     isempty(df) && return df
     df[!, :provider] = fill(:rba, nrow(df))
     df[!, :dataset_id] = fill(metadata.dataset_id, nrow(df))
-    df[!, :source_url] = fill(ismissing(source_url) ? metadata.source_url : source_url, nrow(df))
+    df[!, :source_url] = fill(
+        ismissing(source_url) ? metadata.source_url : source_url, nrow(df)
+    )
     df[!, :source_file] = fill(abspath(path), nrow(df))
     return df
 end
@@ -535,11 +540,7 @@ function _empty_rba_tidy()
 end
 
 function _rba_metadata(row=nothing)
-    row === nothing && return (
-        dataset_id="",
-        title="",
-        source_url=missing,
-    )
+    row === nothing && return (dataset_id="", title="", source_url=missing)
     return (
         dataset_id=String(row.dataset_id),
         title=String(row.title),
@@ -658,7 +659,9 @@ function _rba_cash_rate_rows(text::AbstractString)
 end
 
 function _rba_balance_sheet_date(text::AbstractString)
-    match_value = match(r"At close of business on [A-Za-z]+,\s+(\d{1,2}\s+[A-Z][a-z]+\s+\d{4})", text)
+    match_value = match(
+        r"At close of business on [A-Za-z]+,\s+(\d{1,2}\s+[A-Z][a-z]+\s+\d{4})", text
+    )
     match_value === nothing && return nothing
     return _parse_rba_date(match_value.captures[1])
 end
@@ -672,10 +675,7 @@ function _rba_balance_sheet_rows(text::AbstractString)
     rows = NamedTuple[]
     for (index, match_value) in enumerate(matches)
         item = strip(match_value.captures[1])
-        item = replace(
-            item,
-            r"^Liabilities and Equity Movement Assets Movement\s+"i => "",
-        )
+        item = replace(item, r"^Liabilities and Equity Movement Assets Movement\s+"i => "")
         value = _parse_abs_float(match_value.captures[2])
         movement = _parse_abs_float(match_value.captures[3])
         side = index <= cld(length(matches), 2) ? "liabilities_and_equity" : "assets"
@@ -688,8 +688,10 @@ function _html_table_rows(doc)
     rows = NamedTuple[]
     for table in _html_findall(doc, "//table")
         raw_rows = [
-            [_clean_discovery_text(_html_text(cell)) for cell in _html_findall(row, "./th|./td")] for
-            row in _html_findall(table, ".//tr")
+            [
+                _clean_discovery_text(_html_text(cell)) for
+                cell in _html_findall(row, "./th|./td")
+            ] for row in _html_findall(table, ".//tr")
         ]
         isempty(raw_rows) && continue
         header = _column_names(first(raw_rows))

@@ -7,9 +7,7 @@ struct RBAProvider <: AbstractProvider end
 struct APRAProvider <: AbstractProvider end
 
 const _PROVIDERS = Dict{Symbol, AbstractProvider}(
-    :abs => ABSProvider(),
-    :apra => APRAProvider(),
-    :rba => RBAProvider(),
+    :abs => ABSProvider(), :apra => APRAProvider(), :rba => RBAProvider()
 )
 
 provider_id(::ABSProvider) = :abs
@@ -22,8 +20,11 @@ provider_name(::RBAProvider) = "Reserve Bank of Australia"
 function _provider(provider)
     provider isa AbstractProvider && return provider
     key = provider isa Symbol ? provider : Symbol(lowercase(strip(string(provider))))
-    haskey(_PROVIDERS, key) ||
-        throw(ArgumentError("unsupported provider `$provider`; expected one of $(sort(collect(keys(_PROVIDERS))))"))
+    haskey(_PROVIDERS, key) || throw(
+        ArgumentError(
+            "unsupported provider `$provider`; expected one of $(sort(collect(keys(_PROVIDERS))))",
+        ),
+    )
     return _PROVIDERS[key]
 end
 
@@ -112,13 +113,7 @@ function read_data(
     refresh::Bool=false,
 )
     return _read_data(
-        _provider(provider),
-        source;
-        file,
-        release,
-        cache,
-        cache_parsed,
-        refresh,
+        _provider(provider), source; file, release, cache, cache_parsed, refresh
     )
 end
 
@@ -228,13 +223,16 @@ function _abs_provider_files(cat_no=nothing; refresh::Bool=false)
     return _provider_file_rows(rows)
 end
 
-_datasets(::ABSProvider; refresh::Bool=false) = _provider_datasets_from_files(_abs_provider_files(; refresh))
+function _datasets(::ABSProvider; refresh::Bool=false)
+    return _provider_datasets_from_files(_abs_provider_files(; refresh))
+end
 
 function _datafiles(::ABSProvider, dataset_id=nothing; refresh::Bool=false, release=nothing)
     if release === nothing
         return _abs_provider_files(dataset_id; refresh)
     end
-    dataset_id === nothing && throw(ArgumentError("dataset_id is required when release is supplied for ABS"))
+    dataset_id === nothing &&
+        throw(ArgumentError("dataset_id is required when release is supplied for ABS"))
     df = if release isa Date
         _files_for_release(string(dataset_id), release; refresh, strict=refresh)
     else
@@ -295,12 +293,5 @@ function _read_data(
     cache_parsed::Bool=true,
     refresh::Bool=false,
 )
-    return read_abs(
-        source;
-        tables=file,
-        release,
-        cache,
-        cache_parsed,
-        refresh,
-    )
+    return read_abs(source; tables=file, release, cache, cache_parsed, refresh)
 end
